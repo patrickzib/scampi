@@ -1,9 +1,9 @@
 [project]
 name = "scampi"
 
-version = "0.1.0"
+version = "0.1.1"
 
-description = "scampi - Fast Pattern Discovery in Massive Time Series"
+description = "SCAMPI - Fast Pattern Discovery in Massive Time Series"
 readme = "README.md"
 authors = [
     {name = "patrickzib", email = "patrick.schaefer@hu-berlin.de"}
