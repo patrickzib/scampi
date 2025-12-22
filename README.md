@@ -71,15 +71,22 @@ time series.
 
 ## Installation
 
-Install the project directly from source.
+The easiest is to use pip to install motiflets.
 
-### Build from Source
+### a) Install using pip
+```
+pip install scampi
+```
+
+You can also install  the project from source.
+
+### b) Build from Source
 
 Clone the repository:
 
 ```bash
-git clone https://github.com/patrickzib/motiflets.git
-cd motiflets
+git clone https://github.com/patrickzib/scampi.git
+cd scampi
 ````
 
 Install the package:
