@@ -45,7 +45,9 @@ experiments used in the evaluation.
 ## SCAMPI (SCalable Anytime Mining of Patterns In time series)
 
 This paper introduces SCAMPI (scalable Anytime Mining of Pat-
-terns under Euclidean Distance). It builds upon the Motiflets definition of 
+terns under Euclidean Distance). SCAMPI is a fast LSH-based backend for
+discovering motif sets in massive time series.
+The code builds upon the Motiflets definition of 
 motif sets but was systematically designed from the
 ground up to exploit commodity multi-core hardware and SOTA
 data structures while maintaining high precision. To overcome
