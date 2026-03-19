@@ -1266,16 +1266,12 @@ def search_k_motiflets_elbow(
         if backend == "scampi":
             backend_imlp = SCAMPINearestNeighbors(
                     m, k_max_,
+                    top_k=top_N,
                     slack=slack,
                     **kwargs)
 
             k_motiflet_distances, k_motiflet_candidates, memory_usage \
                 = backend_imlp.compute_knns(data_raw)
-            if k_motiflet_distances.ndim == 1:
-                dist_matrix = np.full((len(k_motiflet_distances), top_N),
-                                      np.inf, dtype=np.float64)
-                dist_matrix[:, 0] = k_motiflet_distances
-                k_motiflet_distances = dist_matrix
 
         else:
             if backend in ["faiss", "pynndescent", "annoy"]:

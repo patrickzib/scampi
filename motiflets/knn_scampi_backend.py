@@ -2,6 +2,10 @@ import os
 import psutil
 import numpy as np
 
+os.environ["RUST_LOG"] = "error"
+
+
+
 #from motiflets.distances import *
 #from motiflets.motiflets import _sliding_dot_product, _argknn, get_pairwise_extent_raw
 #from numba import njit, prange
@@ -27,6 +31,7 @@ class SCAMPINearestNeighbors:
             self,
             m,
             k_max,
+            top_k=1,
             slack=0.5,
             verbose=True,
             **kwargs):
@@ -34,6 +39,7 @@ class SCAMPINearestNeighbors:
         self.m = m
         self.k_max = k_max
         self.slack = slack
+        self.top_k = top_k
         self.verbose = verbose
 
         self.scampi_delta = None
@@ -63,14 +69,21 @@ class SCAMPINearestNeighbors:
         pid = os.getpid()
         process = psutil.Process(pid)
 
-        k_motiflet_distances = np.zeros(self.k_max, dtype=np.float64)
+        # k_motiflet_distances = np.zeros(self.k_max, dtype=np.float64)
+        # k_motiflet_candidates = np.empty(self.k_max, dtype=object)
+        k_motiflet_distances = np.full((self.k_max, self.top_k), np.inf, dtype=np.float64)
         k_motiflet_candidates = np.empty(self.k_max, dtype=object)
+
+        for i in range(len(k_motiflet_candidates)):
+            k_motiflet_candidates[i] = []
+
         memory_usage = 0.0
 
         # Prepare common arguments
         attimo_args = {
             'ts': X.flatten(),
             'w': self.m,
+            'top_k' : self.top_k,
             'support': self.k_max - 1,
             'exclusion_zone': int(self.m * self.slack),
             'max_memory': self.scampi_max_memory,
@@ -96,6 +109,7 @@ class SCAMPINearestNeighbors:
                       f"\n\t\tsupport={attimo_args['support']}, "
                       f"\n\t\tmax_memory={attimo_args['max_memory']}, "
                       f"\n\t\texclusion_zone={attimo_args['exclusion_zone']}, "
+                      f"\n\t\ttop_k={attimo_args['top_k']}, "
                       f"\n\t\tstop_on_threshold={attimo_args['stop_on_threshold']}, "
                       # f"\n\t\tfraction_threshold=log(n)/n", flush=True
                 , flush=True)
@@ -110,10 +124,10 @@ class SCAMPINearestNeighbors:
 
                 test_k = mot.support
                 if test_k < self.k_max:
-                    k_motiflet_distances[test_k] = mot.extent ** 2
+                    k_motiflet_distances[test_k][len(k_motiflet_candidates[test_k])] = mot.extent ** 2
 
                     # TODO: Use mot.lower_bound for confidence scores
-                    k_motiflet_candidates[test_k] = np.array(mot.indices)
+                    k_motiflet_candidates[test_k].append(np.array(mot.indices))
 
             if self.verbose:
                 print(f"\t{len(k_motiflet_candidates[-1])}-Motiflet"
