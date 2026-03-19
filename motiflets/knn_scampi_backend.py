@@ -2,10 +2,6 @@ import os
 import psutil
 import numpy as np
 
-os.environ["RUST_LOG"] = "error"
-
-
-
 #from motiflets.distances import *
 #from motiflets.motiflets import _sliding_dot_product, _argknn, get_pairwise_extent_raw
 #from numba import njit, prange

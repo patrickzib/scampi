@@ -5,9 +5,15 @@
 
 __author__ = ["patrickzib"]
 
+import os
 import logging
 from ast import literal_eval
 from os.path import exists
+
+os.environ["RUST_LOG"] = "error"
+logging.basicConfig(level=logging.CRITICAL)
+pyattimo_logger = logging.getLogger('pyattimo')
+pyattimo_logger.setLevel(logging.CRITICAL)
 
 import math
 
@@ -23,9 +29,6 @@ from motiflets.knn_scampi_backend import *
 from motiflets.distances import *
 from motiflets.maxheap import MaxHeap
 
-logging.basicConfig(level=logging.CRITICAL)
-pyattimo_logger = logging.getLogger('pyattimo')
-pyattimo_logger.setLevel(logging.CRITICAL)
 
 
 def as_series(data, index_range, index_name):
