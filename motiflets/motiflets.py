@@ -21,6 +21,7 @@ from scipy.stats import zscore
 from motiflets.knn_vector_backend import *
 from motiflets.knn_scampi_backend import *
 from motiflets.distances import *
+from motiflets.maxheap import MaxHeap
 
 logging.basicConfig(level=logging.CRITICAL)
 pyattimo_logger = logging.getLogger('pyattimo')
@@ -92,6 +93,35 @@ def convert_to_2d(
                          'Try transposing the input.')
 
     return series
+
+
+def flatten_elbows(elbow_points, candidates, dists, max_items=None):
+    if not isinstance(elbow_points, list):
+        return elbow_points, candidates, dists
+
+    items = []
+    for rank in range(len(elbow_points)):
+        for k in elbow_points[rank]:
+            if candidates[k] is None:
+                continue
+            items.append((k, rank, dists[k, rank]))
+
+    if max_items is not None:
+        items.sort(key=lambda item: (-item[0], item[2]))
+        items = items[:max_items]
+
+    flat_candidates = []
+    flat_dists = []
+    for k, rank, dist in items:
+        flat_candidates.append(candidates[k][rank])
+        flat_dists.append(dist)
+
+    flat_elbows = np.arange(len(flat_candidates), dtype=np.int32)
+    return (
+        flat_elbows,
+        np.array(flat_candidates, dtype=object),
+        np.array(flat_dists, dtype=np.float64),
+    )
 
 
 @njit(fastmath=True, cache=True)
@@ -702,7 +732,8 @@ def get_approximate_k_motiflet(
         distance_single=None,
         preprocessing=None,
         use_D_full=True,
-        upper_bound=np.inf
+        upper_bound=np.inf,
+        top_N=1
 ):
     """Compute the approximate k-Motiflets.
 
@@ -725,23 +756,23 @@ def get_approximate_k_motiflet(
         If False, uses pairwise distances computed from the time series.
     upper_bound : float
         Used for admissible pruning
+    top_N : int
+        Number of best motiflets to return
 
     Returns
     -------
     Tuple
-        motiflet_candidate : np.array
-            The (approximate) best motiflet found
-        motiflet_dist:
-            The extent of the motiflet found
+        motiflet_candidates : np.array
+            The (approximate) best motiflets found
+        motiflet_dists:
+            The extents of the motiflets found
         motiflet_all_candidates : np.array
             All candidates found during the search, with k-NNs for each subsequence
             in the time series. The first k elements are the k-NNs, the rest is -1.
     """
     n = ts.shape[-1] - m + 1
-    motiflet_dist = upper_bound
-    motiflet_candidate = None
-
     motiflet_all_candidates = np.full((n, k), -1, dtype=np.int32)
+    heap = MaxHeap(top_N, k)
 
     # allow subsequence itself
     # Fill diagonal with 0
@@ -757,30 +788,46 @@ def get_approximate_k_motiflet(
 
     # order by increasing k-nn distance
     best_order = np.argsort(knn_distances)
+    current_bound = upper_bound
 
     for i, order in enumerate(best_order):
         idx = knns[order, :k]
         motiflet_all_candidates[i, :min(k, len(idx))] = idx
 
         if len(idx) >= k and idx[-1] >= 0:
-            if knn_distances[order] <= motiflet_dist:
+            bound_check = heap.heap_dist[0] if heap.size == top_N else np.inf
+            if knn_distances[order] <= bound_check:
                 if use_D_full:
                     # get_pairwise_extent requires the full distance matrix
-                    motiflet_extent = get_pairwise_extent(D, idx, motiflet_dist)
+                    motiflet_extent = get_pairwise_extent(D, idx, bound_check)
                 else:
                     # get_pairwise_extent_raw does pairwise comparisons
                     motiflet_extent = get_pairwise_extent_raw(
-                        ts, idx, m, distance_single, preprocessing, motiflet_dist)
+                        ts, idx, m, distance_single, preprocessing, bound_check)
 
-                if motiflet_extent <= motiflet_dist:
-                    motiflet_dist = motiflet_extent
-                    motiflet_candidate = idx
+                if motiflet_extent <= bound_check:
+                    # Search for overlap - if there is a just a single overlap, replace the
+                    # motiflet with the largest distance in the heap
+                    overlap_pos = []
+                    for j in np.arange(heap.size):
+                        if not _check_unique(idx, heap.heap_candidates[j], m):
+                            # if heap.heap_dist[j] > heap.heap_dist[overlap_pos]:
+                            overlap_pos.append(j)
+
+                    if (len(overlap_pos) == 0) and (heap.size < top_N):
+                        heap.push(motiflet_extent, idx)
+                    elif len(overlap_pos) <= 1:
+                        replace_pos = overlap_pos[0] if len(overlap_pos) == 1 else 0
+                        if motiflet_extent < heap.heap_dist[replace_pos]:
+                            # print(idx, "replacing", heap.heap_candidates[replace_pos], "overlap?", overlap_pos!=-1)
+                            heap.replace_at(replace_pos, motiflet_extent, idx)
             else:
                 # There is no point in continuing, as the distances are sorted
                 # and the next k-NN will have a larger distance.
                 break
 
-    return motiflet_candidate, motiflet_dist, motiflet_all_candidates
+    motiflet_candidates_sorted, motiflet_dists = heap.sorted_entries()
+    return motiflet_candidates_sorted, motiflet_dists, motiflet_all_candidates
 
 
 @njit(fastmath=True, cache=True)
@@ -849,6 +896,53 @@ def filter_unique(elbow_points, candidates, motif_length):
             filtered_ebp.append(elbow_points[i])
 
     return np.array(filtered_ebp)
+
+
+def filter_unique_across_ranks(elbow_points_per_rank, candidates, dists, motif_length):
+    """Filters overlapping motifsets across multiple ranks.
+
+    The candidates are ordered by motifset size (k) descending, then distance ascending.
+    Overlapping motifsets are removed, keeping the first encountered candidate.
+
+    Parameters
+    ----------
+    elbow_points_per_rank : list of array-like
+        List of elbow points for each rank.
+    candidates : array-like
+        Motifset candidates for each k. Each entry is (top_N, k) if top_N > 1.
+    dists : array-like
+        Distances for each k and rank, shape (k_max, top_N).
+    motif_length : int
+        Length of the motifs, needed for checking overlaps.
+
+    Returns
+    -------
+    filtered_elbows : list of np.array
+        Filtered elbow points for each rank.
+    """
+    filtered = [[] for _ in range(len(elbow_points_per_rank))]
+    items = []
+
+    for rank, elbows in enumerate(elbow_points_per_rank):
+        for k in elbows:
+            if k < len(candidates):
+                items.append((int(k), float(dists[k, rank]), rank))
+
+    items.sort(key=lambda item: (-item[0], item[1]))
+
+    accepted = []
+    for k, _, rank in items:
+        motifset = candidates[k][rank]
+        unique = True
+        for acc_rank, acc_k in accepted:
+            if not _check_unique(motifset, candidates[acc_k][acc_rank], motif_length):
+                unique = False
+                break
+        if unique:
+            filtered[rank].append(k)
+            accepted.append((rank, k))
+
+    return [np.array(sorted(rank_elbows), dtype=np.int32) for rank_elbows in filtered]
 
 
 @njit(fastmath=True, cache=True)
@@ -996,7 +1090,16 @@ def find_au_ef_motif_length(
                 distance_single=distance_single,
                 distance_preprocessing=distance_preprocessing,
                 backend=backend,
+                top_N=1,
                 kwargs=kwargs)
+
+            # flatten the data types
+            dist = dist.squeeze(1)
+            elbow_points = np.array(elbow_points).squeeze(1)
+            candidates_rank = np.empty(len(candidates), dtype=object)
+            for c in range(len(candidates)):
+                if candidates[c] is not None:
+                    candidates_rank[c] = candidates[c][0]
 
             dists_ = dist[(~np.isinf(dist)) & (~np.isnan(dist))]
             if dists_.max() - dists_.min() == 0:
@@ -1006,15 +1109,15 @@ def find_au_ef_motif_length(
                         dists_.max() - dists_.min())).sum()
                              / len(dists_))
 
-            elbow_points = filter_unique(elbow_points, candidates, m // subsample)
+            elbow_points = filter_unique(elbow_points, candidates_rank, m // subsample)
 
             if len(elbow_points > 0):
                 elbows[i] = elbow_points
-                top_motiflets[i] = candidates[elbow_points]
+                top_motiflets[i] = candidates_rank[elbow_points]
             else:
                 # we found only the pair motif
                 elbows[i] = [2]
-                top_motiflets[i] = [candidates[2]]
+                top_motiflets[i] = [candidates_rank[2]]
 
                 # no elbow can be found, ignore this part
                 au_efs[i] = 1.0
@@ -1050,6 +1153,7 @@ def search_k_motiflets_elbow(
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
         backend="scalable",
+        top_N=1,
         **kwargs
 ):
     """Computes the elbow-function.
@@ -1097,6 +1201,8 @@ def search_k_motiflets_elbow(
         'default' are supported.
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
+    top_N : int
+        Number of best motiflets to return per k.
 
     Returns
     -------
@@ -1106,7 +1212,7 @@ def search_k_motiflets_elbow(
         candidates :
             motifset-candidates for each k
         elbow_points :
-            elbow-points
+            elbow-points per rank when top_N > 1
         m : int
             best motif length
     """
@@ -1146,7 +1252,7 @@ def search_k_motiflets_elbow(
     k_max_ = max(3, min(int(n // (m * slack)), k_max))
 
     # non-overlapping motifs only
-    k_motiflet_distances = np.zeros(k_max_)
+    k_motiflet_distances = np.full((k_max_, top_N), np.inf, dtype=np.float64)
     k_motiflet_candidates = np.empty(k_max_, dtype=object)
 
     if backend in ["faiss", "annoy", "pynndescent",
@@ -1154,8 +1260,8 @@ def search_k_motiflets_elbow(
 
         backend = check_valid_backend(backend, data_raw, n)
 
-        print(f"Using backend: {backend} for k-Motiflet search with motif length: {m}")
-        print(f"Jobs used: {n_jobs}")
+        # print(f"Using backend: {backend} for k-Motiflet search with motif length: {m}")
+        # print(f"Jobs used: {n_jobs}")
 
         if backend == "scampi":
             backend_imlp = SCAMPINearestNeighbors(
@@ -1165,6 +1271,11 @@ def search_k_motiflets_elbow(
 
             k_motiflet_distances, k_motiflet_candidates, memory_usage \
                 = backend_imlp.compute_knns(data_raw)
+            if k_motiflet_distances.ndim == 1:
+                dist_matrix = np.full((len(k_motiflet_distances), top_N),
+                                      np.inf, dtype=np.float64)
+                dist_matrix[:, 0] = k_motiflet_distances
+                k_motiflet_distances = dist_matrix
 
         else:
             if backend in ["faiss", "pynndescent", "annoy"]:
@@ -1207,15 +1318,17 @@ def search_k_motiflets_elbow(
 
             upper_bound = np.inf
             for test_k in np.arange(k_max_ - 1, 1, -1):
-                candidate, candidate_dist, _ = get_approximate_k_motiflet(
+                candidates, candidate_dists, _ = get_approximate_k_motiflet(
                     data_raw, m, test_k, D_full, knns,
                     distance_single=distance_single,
                     preprocessing=preprocessing,
                     use_D_full=(backend in ["default"]),
                     upper_bound=upper_bound,
+                    top_N=top_N,
                 )
-                k_motiflet_distances[test_k] = candidate_dist
-                k_motiflet_candidates[test_k] = candidate
+                candidate_dist = candidate_dists[0]
+                k_motiflet_distances[test_k, :len(candidate_dists)] = candidate_dists
+                k_motiflet_candidates[test_k] = candidates
                 upper_bound = min(candidate_dist, upper_bound)
 
             del D_full
@@ -1226,20 +1339,24 @@ def search_k_motiflets_elbow(
             'Use "scalable", "faiss", "pynndescent", "annoy", '
             '"scampi", or "default".')
 
-    # print(f"\tMemory usage: {memory_usage:.2f} MB")
-
     # smoothen the line to make it monotonically increasing
     k_motiflet_distances[0:2] = k_motiflet_distances[2]
-    for i in range(len(k_motiflet_distances), 2):
-        k_motiflet_distances[i - 1] = min(k_motiflet_distances[i],
-                                          k_motiflet_distances[i - 1])
+    for i in range(len(k_motiflet_distances)-1, 2, -1):
+        k_motiflet_distances[i - 1] = (
+            np.minimum(k_motiflet_distances[i], k_motiflet_distances[i - 1]))
 
-    elbow_points = find_elbow_points(
-        k_motiflet_distances, elbow_deviation=elbow_deviation)
+    elbow_points = []
+    for rank in range(top_N):
+        eb = find_elbow_points(
+            k_motiflet_distances[:, rank], elbow_deviation=elbow_deviation)
 
-    if filter:
-        elbow_points = filter_unique(
-            elbow_points, k_motiflet_candidates, m)
+        if filter:
+            candidates_rank = np.empty(len(k_motiflet_candidates), dtype=object)
+            for e in eb:
+                candidates_rank[e] = k_motiflet_candidates[e][rank]
+            eb = filter_unique(eb, candidates_rank, m)
+
+        elbow_points.append(eb)
 
     set_num_threads(previous_jobs)
 
