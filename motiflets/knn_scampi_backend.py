@@ -29,7 +29,7 @@ class SCAMPINearestNeighbors:
             k_max,
             top_k=1,
             slack=0.5,
-            verbose=True,
+            verbose=False,
             **kwargs):
 
         self.m = m
@@ -113,7 +113,9 @@ class SCAMPINearestNeighbors:
         m_iter = pyattimo.MotifletsIterator(**attimo_args)
 
         try:
-            print("\tComputing motiflets with SCAMPI...", flush=True)
+            if self.verbose:
+                print("\tComputing motiflets with SCAMPI...", flush=True)
+
             for mot in m_iter:
                 if self.verbose:
                     print(f"\t\t{mot}", flush=True)
