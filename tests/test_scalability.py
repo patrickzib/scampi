@@ -32,10 +32,10 @@ def test_motiflets_sparse():
         #1_000,
         #5_000,
         #10_000,
-        #30_000,
+        30_000,
         #50_000,
         #100_000,
-        150_000,
+        #150_000,
         #200_000,
         #250_000
     ]
@@ -61,14 +61,21 @@ def test_motiflets_sparse():
                 k_max = 10
 
                 t_before = time.time()
-                extent, motiflets, _ = ml.fit_k_elbow(
+
+                length = ml.fit_motif_length(
                     k_max,
-                    22,
-                    plot_elbows=False,
-                    plot_motifs_as_grid=False
+                    np.array([22, 50, 222], dtype=np.int32),
                 )
 
-                ml.plot_motifset()
+                extent, motiflets, _ = ml.fit_k_elbow(
+                    k_max,
+                    222,
+                    plot_elbows=False,
+                    plot_motifs_as_grid=True,
+                    top_N = 5
+                )
+
+                # ml.plot_motifset()
 
                 t_after = time.time()
                 time_s[i] = t_after - t_before

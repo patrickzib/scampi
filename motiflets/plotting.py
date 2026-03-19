@@ -35,6 +35,7 @@ class Motiflets:
             slack=0.5,
             n_jobs=-1,
             backend="scalable",
+            top_N=1,
             **kwargs
     ):
         """Computes the AU_EF plot to extract the best motif lengths
@@ -71,6 +72,8 @@ class Motiflets:
                 Use 'default' for the original exact implementation with excessive memory,
                 Use 'scalable' for a scalable, exact implementation with less memory,
                 Use 'scampi' for a fast, scalable but approximate implementation.
+            top_N : int
+                Number of best motiflets to return per k.
 
             Returns
             -------
@@ -82,6 +85,7 @@ class Motiflets:
         self.elbow_deviation = elbow_deviation
         self.slack = slack
         self.ground_truth = ground_truth
+        self.top_N = top_N
 
         n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
         self.n_jobs = n_jobs
@@ -168,6 +172,7 @@ class Motiflets:
             filter=True,
             plot_elbows=True,
             plot_motifs_as_grid=True,
+            top_N=None,
     ):
         """Plots the elbow-plot for k-Motiflets.
 
@@ -188,6 +193,8 @@ class Motiflets:
                 filters overlapping motiflets from the result,
             plot_elbows: bool, default=False
                 plots the elbow ploints into the plot
+            top_N : int
+                Number of best motiflets to return per k.
 
             Returns
             -------
@@ -198,6 +205,9 @@ class Motiflets:
 
             """
         self.k_max = k_max
+
+        if top_N is None:
+            top_N = self.top_N
 
         if motif_length is None:
             motif_length = self.motif_length
@@ -221,6 +231,7 @@ class Motiflets:
             distance_single=self.distance_single,
             distance_preprocessing=self.distance_preprocessing,
             backend=self.backend,
+            top_N=top_N,
             **self.kwargs
         )
 
@@ -245,14 +256,16 @@ class Motiflets:
         if self.dists is None or self.motiflets is None or self.elbow_points is None:
             raise Exception("Please call fit_k_elbow first.")
 
+        flat_elbows, flat_candidates, _ = ml.flatten_elbows(
+            self.elbow_points, self.motiflets, self.dists, max_items=self.top_N)
         if elbow_point is None:
-            elbow_point = self.elbow_points[-1]
+            elbow_point = flat_elbows[-1]
 
         fig, ax = plot_motifset(
             self.ds_name,
             self.series,
             max_points=max_points,
-            motifsets=self.motiflets[elbow_point].reshape((1, -1)),
+            motifsets=flat_candidates[elbow_point].reshape((1, -1)),
             motif_length=self.motif_length,
             show=path is None)
 
@@ -686,6 +699,7 @@ def plot_elbow(
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
         backend="scalable",
+        top_N=1,
         **kwargs
 ):
     """Plots the elbow-plot for k-Motiflets.
@@ -726,6 +740,8 @@ def plot_elbow(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
         Use 'scampi' for a fast, scalable but approximate implementation.
+    top_N : int
+        Number of best motiflets to return per k.
 
     Returns
     -------
@@ -748,34 +764,32 @@ def plot_elbow(
         n_jobs=n_jobs,
         elbow_deviation=elbow_deviation,
         slack=slack,
+        filter=filter,
         distance=distance,
         distance_single=distance_single,
         distance_preprocessing=distance_preprocessing,
         backend=backend,
+        top_N=top_N,
         **kwargs)
     endTime = (time.perf_counter() - startTime)
 
     # print(f"Found motiflets in {np.round(endTime, 1)} s")
 
-    if filter:
-        elbow_points = ml.filter_unique(elbow_points, candidates, motif_length)
-
-    # print("\tElbow Points", elbow_points)
+    elbow_points_plot, candidates_plot, dists_plot = ml.flatten_elbows(
+        elbow_points, candidates, dists, max_items=top_N)
 
     if plot_elbows:
         _plot_elbow_points(
-            ds_name, data,
-            motif_length, elbow_points,
-            candidates, dists)
+            ds_name, data, motif_length, elbow_points_plot, candidates_plot, dists_plot)
 
     if plot_grid:
         if data.shape[0] == 1:
             plot_grid_motiflets(
                 ds_name,
                 data,
-                candidates,
-                elbow_points,
-                dists,
+                candidates_plot,
+                elbow_points_plot,
+                dists_plot,
                 motif_length,
                 method_name=method_name,
                 show_elbows=False,
@@ -785,7 +799,7 @@ def plot_elbow(
             plot_motifset(
                 ds_name,
                 data,
-                motifsets=candidates[elbow_points],
+                motifsets=candidates_plot[elbow_points_plot],
                 motif_length=motif_length,
                 ground_truth=ground_truth,
                 show=True)
@@ -845,6 +859,8 @@ def plot_motif_length_selection(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
         Use 'scampi' for a fast, scalable but approximate implementation.
+    top_N : int
+        Number of best motiflets to return per k.
 
     Returns
     -------
