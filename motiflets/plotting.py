@@ -251,7 +251,7 @@ class Motiflets:
             raise Exception("Please call fit_k_elbow first.")
 
         flat_elbows, flat_candidates, _ = ml.flatten_elbows(
-            self.elbow_points, self.motiflets, self.dists, max_items=self.top_N)
+            self.elbow_points, self.motiflets, self.dists, max_items=self.top_N, k_max=self.k_max)
         if elbow_point is None:
             elbow_point = flat_elbows[-1]
 
@@ -770,7 +770,7 @@ def plot_elbow(
     # print(f"Found motiflets in {np.round(endTime, 1)} s")
 
     elbow_points_plot, candidates_plot, dists_plot = ml.flatten_elbows(
-        elbow_points, candidates, dists, max_items=top_N)
+        elbow_points, candidates, dists, max_items=top_N, k_max=k_max)
 
     if plot_elbows:
         _plot_elbow_points(

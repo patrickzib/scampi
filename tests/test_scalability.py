@@ -49,7 +49,7 @@ def test_motiflets_sparse():
     for i, length in enumerate(lengths):
         print("--------------------")
         for distance in ["znormed_ed"]:
-            for backend in ["scampi"]:
+            for backend in ["scalable"]:
                 series = B.iloc[:length, 0].T
 
                 print("Distance", distance)
