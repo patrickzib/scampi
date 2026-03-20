@@ -1384,7 +1384,7 @@ def check_valid_backend(backend, data_raw, n):
 
     elif backend == "default":
         """ Switch to scalable matrix representation when length is >25_000 or 4 GB. """
-        if data_raw.shape[0].ndim == 1:
+        if data_raw.shape[0] == 1:
             recommend_scalable = n >= 25_000
         else:
             d = data_raw.shape[0]
