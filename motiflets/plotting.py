@@ -35,7 +35,6 @@ class Motiflets:
             slack=0.5,
             n_jobs=-1,
             backend="scalable",
-            top_N=1,
             **kwargs
     ):
         """Computes the AU_EF plot to extract the best motif lengths
@@ -72,8 +71,6 @@ class Motiflets:
                 Use 'default' for the original exact implementation with excessive memory,
                 Use 'scalable' for a scalable, exact implementation with less memory,
                 Use 'scampi' for a fast, scalable but approximate implementation.
-            top_N : int
-                Number of best motiflets to return per k.
 
             Returns
             -------
@@ -85,7 +82,6 @@ class Motiflets:
         self.elbow_deviation = elbow_deviation
         self.slack = slack
         self.ground_truth = ground_truth
-        self.top_N = top_N
 
         n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
         self.n_jobs = n_jobs
@@ -172,7 +168,7 @@ class Motiflets:
             filter=True,
             plot_elbows=True,
             plot_motifs_as_grid=True,
-            top_N=None,
+            top_N=1
     ):
         """Plots the elbow-plot for k-Motiflets.
 
@@ -205,9 +201,7 @@ class Motiflets:
 
             """
         self.k_max = k_max
-
-        if top_N is None:
-            top_N = self.top_N
+        self.top_N = top_N
 
         if motif_length is None:
             motif_length = self.motif_length
@@ -231,7 +225,7 @@ class Motiflets:
             distance_single=self.distance_single,
             distance_preprocessing=self.distance_preprocessing,
             backend=self.backend,
-            top_N=top_N,
+            top_N=self.top_N,
             **self.kwargs
         )
 
