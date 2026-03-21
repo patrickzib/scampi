@@ -883,7 +883,7 @@ def plot_motif_length_selection(
             backend=backend,
             **kwargs)
     endTime = (time.perf_counter() - startTime)
-    print("\tTime", np.round(endTime, 1), "s")
+    # print("\tTime", np.round(endTime, 1), "s")
     indices = ~np.isinf(au_ef)
 
     if plot:
