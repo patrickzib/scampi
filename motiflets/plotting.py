@@ -111,10 +111,7 @@ class Motiflets:
             k_max,
             motif_length_range,
             subsample=2,
-            # plot=True,
-            # plot_elbows=False,
-            # plot_motifs_as_grid=True,
-            # plot_best_only=True
+            plot=True
     ):
         """Computes the AU_EF plot to extract the best motif lengths
 
@@ -155,6 +152,7 @@ class Motiflets:
             distance_single=self.distance_single,
             distance_preprocessing=self.distance_preprocessing,
             backend=self.backend,
+            plot=plot,
             **self.kwargs
         )
 
@@ -854,8 +852,6 @@ def plot_motif_length_selection(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
         Use 'scampi' for a fast, scalable but approximate implementation.
-    top_N : int
-        Number of best motiflets to return per k.
 
     Returns
     -------
