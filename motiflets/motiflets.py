@@ -1084,11 +1084,12 @@ def find_au_ef_motif_length(
 
     # TODO parallelize?
     for i, m in enumerate(motif_length_range[::-1]):
-        if m // subsample < data.shape[-1]:
+        m_sub = m // subsample
+        if m_sub < data.shape[-1] and m_sub >= 2:
             dist, candidates, elbow_points, _, memory_usage = search_k_motiflets_elbow(
                 k_max,
                 data,
-                m // subsample,
+                m_sub,
                 n_jobs=n_jobs,
                 exclusion=exclusion,
                 elbow_deviation=elbow_deviation,
@@ -1116,7 +1117,7 @@ def find_au_ef_motif_length(
                         dists_.max() - dists_.min())).sum()
                              / len(dists_))
 
-            elbow_points = filter_unique(elbow_points, candidates_rank, m // subsample)
+            elbow_points = filter_unique(elbow_points, candidates_rank, m_sub)
 
             if len(elbow_points > 0):
                 elbows[i] = elbow_points
