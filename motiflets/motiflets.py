@@ -1102,7 +1102,7 @@ def find_au_ef_motif_length(
 
             # flatten the data types
             dist = dist.squeeze(1)
-            elbow_points = np.array(elbow_points).squeeze(1)
+            elbow_points = np.array(elbow_points).flatten()
             candidates_rank = np.empty(len(candidates), dtype=object)
             for c in range(len(candidates)):
                 if candidates[c] is not None:

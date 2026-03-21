@@ -814,6 +814,7 @@ def plot_motif_length_selection(
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
         backend="scalable",
+        plot=True,
         **kwargs
 ):
     """Computes the AU_EF plot to extract the best motif lengths
@@ -888,25 +889,27 @@ def plot_motif_length_selection(
     endTime = (time.perf_counter() - startTime)
     print("\tTime", np.round(endTime, 1), "s")
     indices = ~np.isinf(au_ef)
-    fig, ax = plt.subplots(figsize=(5, 2))
-    ax = sns.lineplot(
-        x=motif_length_range[indices],
-        y=au_ef[indices],
-        label="AU_EF",
-        ci=None, estimator=None)
-    sns.despine()
-    plt.tight_layout()
-    ax.set_title("Best length on " + ds_name, size=20)
-    ax.set(xlabel='Motif Length' + header, ylabel='Area under EF\n(lower is better)')
 
-    for item in ([ax.xaxis.label, ax.yaxis.label] +
-                 ax.get_xticklabels() + ax.get_yticklabels()):
-        item.set_fontsize(16)
+    if plot:
+        fig, ax = plt.subplots(figsize=(5, 2))
+        ax = sns.lineplot(
+            x=motif_length_range[indices],
+            y=au_ef[indices],
+            label="AU_EF",
+            ci=None, estimator=None)
+        sns.despine()
+        plt.tight_layout()
+        ax.set_title("Best length on " + ds_name, size=20)
+        ax.set(xlabel='Motif Length' + header, ylabel='Area under EF\n(lower is better)')
 
-    # plt.legend(loc="best")
-    fig.set_figheight(5)
-    fig.set_figwidth(5)
-    plt.show()
+        for item in ([ax.xaxis.label, ax.yaxis.label] +
+                     ax.get_xticklabels() + ax.get_yticklabels()):
+            item.set_fontsize(16)
+
+        # plt.legend(loc="best")
+        fig.set_figheight(5)
+        fig.set_figwidth(5)
+        plt.show()
 
     return best_motif_length
 
