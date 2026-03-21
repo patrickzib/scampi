@@ -1258,7 +1258,7 @@ def search_k_motiflets_elbow(
     # non-overlapping motifs only
     n = data_raw.shape[-1] - m + 1
 
-    print(f"Length of the time series: {n}, motif length: {m}, k_max: {k_max}")
+    # print(f"Length of the time series: {n}, motif length: {m}, k_max: {k_max}")
     k_max_ = max(3, min(int(n // (m * slack)), k_max))
 
     # non-overlapping motifs only
