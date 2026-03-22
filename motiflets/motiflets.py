@@ -98,16 +98,13 @@ def convert_to_2d(
     return series
 
 
-def flatten_elbows(elbow_points, candidates, dists, max_items=None, k_max=None):
+def flatten_elbows(elbow_points, candidates, dists, max_items=None):
     if not isinstance(elbow_points, list):
         return elbow_points, candidates, dists
 
     items = []
     for rank in range(len(elbow_points)):
         elbows = elbow_points[rank]
-        if k_max is not None and rank == 0:
-            if k_max not in elbows:
-                elbows = np.append(elbows, np.int32(k_max))
         for k in elbows:
             if candidates[k] is None:
                 continue
