@@ -5,7 +5,7 @@
 __author__ = ["patrickzib"]
 
 import os
-import time
+# import time
 
 import matplotlib
 import pandas as pd
@@ -268,12 +268,12 @@ class Motiflets:
 
         return fig, ax
 
-    def flatten_data(self):
-        return flatten_elbows(
+    def flatten_data(self, max_items=None):
+        return ml.flatten_elbows(
             self.elbow_points,
             self.motiflets,
             self.dists,
-            max_items=self.n_patterns)
+            max_items=max_items)
 
 
 def as_series(data, index_range, index_name):
