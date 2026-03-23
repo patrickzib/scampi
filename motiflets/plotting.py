@@ -4,9 +4,6 @@
 
 __author__ = ["patrickzib"]
 
-import os
-# import time
-
 import matplotlib
 import pandas as pd
 import seaborn as sns
