@@ -1,4 +1,3 @@
-from motiflets.plotting import *
 from motiflets.motiflets import *
 
 path = "../datasets/experiments/"

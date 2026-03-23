@@ -7,7 +7,8 @@ from matplotlib import pyplot as plt
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
-from plotting import Motiflets, plot_motifset
+from motiflets import Motiflets
+from plotting import plot_motifset
 import utils as ut
 
 interesting = {

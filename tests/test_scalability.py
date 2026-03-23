@@ -1,6 +1,8 @@
 import os
+import time
 os.environ["RUST_LOG"] = "error"
 
+from motiflets.motiflets import *
 from motiflets.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
@@ -66,16 +68,16 @@ def test_motiflets_sparse():
 
                 t_before = time.time()
 
-                # length = ml.fit_motif_length(
-                #    k_max,
-                #    np.array([22, 50, 222], dtype=np.int32),
-                # )
+                length = ml.fit_motif_length(
+                   k_max,
+                   np.array([22, 50, 222], dtype=np.int32),
+                )
 
                 extent, motiflets, _ = ml.fit_k_elbow(
                     k_max,
                     22,
-                    plot_elbows=False,
-                    plot_motifs_as_grid=False,
+                    plot_elbows=True,
+                    plot_motifs_as_grid=True,
                     top_N = 1
                 )
 

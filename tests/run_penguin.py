@@ -6,6 +6,7 @@ sys.path.insert(0, "../")
 import scipy.io as sio
 
 import utils as ut
+from motiflets.motiflets import *
 from motiflets.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42

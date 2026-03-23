@@ -100,7 +100,7 @@ pip install .
 ## Usage Example
 
 ```python
-from motiflets.plotting import *
+from motiflets.motiflets import *
 
 ml = Motiflets(
     ds_name,   # dataset name
