@@ -1018,7 +1018,7 @@ def find_au_ef_motif_length(
         distance=znormed_euclidean_distance,
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
-        backend="scalable",
+        backend="default",
         **kwargs):
     """Computes the Area under the Elbow-Function within an of motif lengths.
 
@@ -1045,7 +1045,7 @@ def find_au_ef_motif_length(
         The distance function to be computed.
     distance_preprocessing: callable
         The distance preprocessing function to be computed.
-    backend : String, default="scalable"
+    backend : String, default="default"
         The backend to use. As of now 'scampi', 'scalable', and 'default'
         are supported.
         Use 'default' for the original exact implementation with excessive memory,
@@ -1157,7 +1157,7 @@ def search_k_motiflets_elbow(
         distance=znormed_euclidean_distance,
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
-        backend="scalable",
+        backend="default",
         top_N=1,
         **kwargs
 ):
@@ -1201,7 +1201,7 @@ def search_k_motiflets_elbow(
             The distance function to be computed.
     distance_preprocessing: callable (default=sliding_mean_std)
             The distance preprocessing function to be computed.
-    backend : String, default="scalable"
+    backend : String, default="default"
         The backend to use. As of now 'scampi', 'scalable' and
         'default' are supported.
         Use 'default' for the original exact implementation with excessive memory,
