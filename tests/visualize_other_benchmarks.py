@@ -1,6 +1,4 @@
 import glob
-import os
-import numpy as np
 
 from motiflets.motiflets import *
 from motiflets.plotting import *
