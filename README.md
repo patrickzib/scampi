@@ -105,15 +105,18 @@ from motiflets.plotting import *
 ml = Motiflets(
     ds_name,   # dataset name
     series,    # time series data
-    n_jobs     # number of CPU cores
+    n_jobs,     # number of CPU cores
+    backend="default"    # choose a backend for motif discovery
 )
 
-k_max = 20
-motif_length = 100
+k_max = 20   # maximum motif set size to consider
+motif_length = 100  # length of the motifs to search for
+top_N = 10   # number of top motif sets to return
 
 dists, candidates, elbow_points = ml.fit_k_elbow(
     k_max,
-    motif_length
+    motif_length,
+    top_N=top_N
 )
 
 ml.plot_motifset()

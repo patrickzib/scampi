@@ -49,7 +49,7 @@ def test_motiflets_sparse():
     for i, length in enumerate(lengths):
         print("--------------------")
         for distance in ["znormed_ed"]:
-            for backend in ["scalable"]:
+            for backend in ["default"]:
                 series = B.iloc[:length, 0].T
 
                 print("Distance", distance)
@@ -66,17 +66,17 @@ def test_motiflets_sparse():
 
                 t_before = time.time()
 
-                #length = ml.fit_motif_length(
+                # length = ml.fit_motif_length(
                 #    k_max,
                 #    np.array([22, 50, 222], dtype=np.int32),
-                #)
+                # )
 
                 extent, motiflets, _ = ml.fit_k_elbow(
                     k_max,
                     22,
                     plot_elbows=False,
-                    plot_motifs_as_grid=True,
-                    top_N = 5
+                    plot_motifs_as_grid=False,
+                    top_N = 1
                 )
 
                 # ml.plot_motifset()

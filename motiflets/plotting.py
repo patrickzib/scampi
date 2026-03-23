@@ -34,7 +34,7 @@ class Motiflets:
             distance="znormed_ed",
             slack=0.5,
             n_jobs=-1,
-            backend="scalable",
+            backend="default",
             **kwargs
     ):
         """Computes the AU_EF plot to extract the best motif lengths
@@ -66,7 +66,7 @@ class Motiflets:
                 Defined as percentage of m. E.g. 0.5 is equal to half the window length.
             n_jobs : int
                 Number of jobs to be used.
-            backend : String, default="scalable"
+            backend : String, default="default"
                 The backend to use. As of now 'scalable', 'scampi' and 'default' are supported.
                 Use 'default' for the original exact implementation with excessive memory,
                 Use 'scalable' for a scalable, exact implementation with less memory,
@@ -706,7 +706,7 @@ def plot_elbow(
         distance=znormed_euclidean_distance,
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
-        backend="scalable",
+        backend="default",
         top_N=1,
         **kwargs
 ):
@@ -743,7 +743,7 @@ def plot_elbow(
         The distance function to be computed.
     distance_preprocessing: callable (default=sliding_mean_std)
         The distance preprocessing function to be computed.
-    backend : String, default="scalable"
+    backend : String, default="default"
         The backend to use. As of now 'scalable', 'scampi' and 'default' are supported.
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
@@ -820,7 +820,7 @@ def plot_motif_length_selection(
         distance=znormed_euclidean_distance,
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
-        backend="scalable",
+        backend="default",
         plot=True,
         **kwargs
 ):
@@ -856,7 +856,7 @@ def plot_motif_length_selection(
         The distance function to be computed.
     distance_preprocessing: callable (default=sliding_mean_std)
         The distance preprocessing function to be computed.
-    backend : String, default="scalable"
+    backend : String, default="default"
         The backend to use. As of now 'scalable', 'scampi' and 'default' are supported.
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
