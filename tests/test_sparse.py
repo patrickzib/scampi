@@ -1,5 +1,6 @@
 import scipy.io as sio
-from motiflets.plotting import *
+from motiflets.motiflets import *
+# from motiflets.plotting import *
 
 path = "../datasets/experiments/"
 

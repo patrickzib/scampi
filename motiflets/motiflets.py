@@ -19,16 +19,307 @@ import math
 
 import pandas as pd
 from numba import objmode
-from numba import types
 from numba.typed import Dict, List
 from scipy.signal import argrelextrema
 from scipy.stats import zscore
 
+import motiflets.plotting as pl
 from motiflets.knn_vector_backend import *
 from motiflets.knn_scampi_backend import *
 from motiflets.distances import *
 from motiflets.maxheap import MaxHeap
 
+
+class Motiflets:
+
+    def __init__(
+            self,
+            ds_name,
+            series,
+            ground_truth=None,
+            elbow_deviation=1.00,
+            distance="znormed_ed",
+            slack=0.5,
+            n_jobs=-1,
+            backend="default",
+            **kwargs
+    ):
+        """Computes the AU_EF plot to extract the best motif lengths
+
+            This is the method to find and plot the characteristic motif-lengths, for k in
+            [2...k_max], using the area AU-EF plot.
+
+            Details are given within the paper 5.2 Learning Motif Length l.
+
+            Parameters
+            ----------
+            ds_name: String
+                Name of the time series for displaying
+            series: array-like
+                the TS
+            ground_truth: pd.Series
+                Ground-truth information as pd.Series.
+            elbow_deviation : float, default=1.00
+                The minimal absolute deviation needed to detect an elbow.
+                It measures the absolute change in deviation from k to k+1.
+                1.05 corresponds to 5% increase in deviation.
+            distance: str (default="znormed_ed")
+                The name of the distance function to be computed.
+                Available options are:
+                    - 'znormed_ed' or 'znormed_euclidean' for z-normalized ED
+                    - 'ed' or 'euclidean' for the "normal" ED.
+            slack: float
+                Defines an exclusion zone around each subsequence to avoid trivial matches.
+                Defined as percentage of m. E.g. 0.5 is equal to half the window length.
+            n_jobs : int
+                Number of jobs to be used.
+            backend : String, default="default"
+                The backend to use. As of now 'scalable', 'scampi' and 'default' are supported.
+                Use 'default' for the original exact implementation with excessive memory,
+                Use 'scalable' for a scalable, exact implementation with less memory,
+                Use 'scampi' for a fast, scalable but approximate implementation.
+
+            Returns
+            -------
+            best_motif_length: int
+                The motif length that maximizes the AU-EF.
+            """
+        self.ds_name = ds_name
+        self.series = series
+        self.elbow_deviation = elbow_deviation
+        self.slack = slack
+        self.ground_truth = ground_truth
+
+        n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
+        self.n_jobs = n_jobs
+
+        # distance function used
+        self.distance_preprocessing, self.distance, self.distance_single \
+            = map_distances(distance)
+        self.backend = backend
+
+        self.motif_length_range = None
+        self.motif_length = 0
+        self.all_extrema = []
+        self.all_elbows = []
+        self.all_top_motiflets = []
+        self.all_dists = []
+        self.kwargs = kwargs
+
+        self.motif_length = 0
+        self.memory_usage = 0
+        self.k_max = 0
+        self.dists = []
+        self.motiflets = []
+        self.elbow_points = []
+
+    def fit_motif_length(
+            self,
+            k_max,
+            motif_length_range,
+            subsample=2,
+            plot=True
+    ):
+        """Computes the AU_EF plot to extract the best motif lengths
+
+            This is the method to find and plot the characteristic motif-lengths, for k in
+            [2...k_max], using the area AU-EF plot.
+
+            Details are given within the paper 5.2 Learning Motif Length l.
+
+            Parameters
+            ----------
+            k_max: int
+                use [2...k_max] to compute the elbow plot.
+            motif_length_range: array-like
+                the interval of lengths
+            subsample: int (default=2)
+                the subsample factor
+
+            Returns
+            -------
+            best_motif_length: int
+                The motif length that maximizes the AU-EF.
+
+            """
+
+        self.motif_length_range = motif_length_range
+        self.k_max = k_max
+
+        # turn into 2d array
+        index, data_raw = pd_series_to_numpy(self.series)
+
+        header = " in " + self.series.index.name if isinstance(
+            self.series, pd.Series) and self.series.index.name != None else ""
+
+        # discretizes ranges
+        motif_length_range = np.int32(motif_length_range)
+
+        self.motif_length, _, au_ef, elbow, top_motiflets, _ = \
+            find_au_ef_motif_length(
+                data_raw, k_max,
+                motif_length_range=motif_length_range,
+                n_jobs=self.n_jobs,
+                elbow_deviation=self.elbow_deviation,
+                slack=self.slack,
+                subsample=subsample,
+                distance=self.distance,
+                distance_single=self.distance_single,
+                distance_preprocessing=self.distance_preprocessing,
+                backend=self.backend,
+                **self.kwargs)
+
+        if plot:
+            pl.plot_window_lengths(self.ds_name, au_ef, header, motif_length_range)
+
+        return self.motif_length
+
+    def fit_k_elbow(
+            self,
+            k_max,
+            motif_length=None,  # if None, use best_motif_length
+            filter=True,
+            top_N=1,
+            plot_elbows=True,
+            plot_motifs_as_grid=True,
+            plot_method_name=None,
+            plot_ground_truth=None,
+    ):
+        """Plots the elbow-plot for k-Motiflets.
+
+            This is the method to find and plot the characteristic k-Motiflets within range
+            [2...k_max] for given a `motif_length` using elbow-plots.
+
+            Details are given within the paper Section 5.1 Learning meaningful k.
+
+            Parameters
+            ----------
+            k_max: int
+                use [2...k_max] to compute the elbow plot (user parameter).
+            motif_length: int
+                the length of the motif (user parameter)
+            filter: bool, default=True
+                filters overlapping motiflets from the result,
+            top_N : int, default=1
+                Number of best motiflets to return per k.
+            plot_elbows: bool, default=False
+                plots the elbow ploints into the plot
+            plot_motifs_as_grid: bool, default=True
+                plot_plots the motiflets as grid into the plot
+            plot_ground_truth: pd.Series (default=None)
+                Ground-truth information as pd.Series.
+            plot_method_name: str, default=None
+                The name of the method to be plotted in the title when plotting
+                motiflets as grid.
+
+            Returns
+            -------
+            Tuple
+                dists:          distances for each k in [2...k_max]
+                candidates:     motifset-candidates for each k
+                elbow_points:   elbow-points
+
+            """
+        self.k_max = k_max
+        self.top_N = top_N
+
+        if motif_length is None:
+            motif_length = self.motif_length
+        else:
+            self.motif_length = motif_length
+
+        # turn into 2d array
+        data = convert_to_2d(self.series)
+        _, raw_data = pd_series_to_numpy(data)
+
+        self.dists, self.motiflets, self.elbow_points, _, self.memory_usage \
+            = search_k_motiflets_elbow(
+            k_max,
+            raw_data,
+            motif_length,
+            n_jobs=self.n_jobs,
+            elbow_deviation=self.elbow_deviation,
+            slack=self.slack,
+            filter=filter,
+            distance=self.distance,
+            distance_single=self.distance_single,
+            distance_preprocessing=self.distance_preprocessing,
+            backend=self.backend,
+            top_N=self.top_N,
+            **self.kwargs)
+
+        if plot_elbows:
+            pl._plot_elbow_points(
+                self.ds_name, raw_data, motif_length,
+                self.elbow_points, self.motiflets, self.dists)
+
+        if plot_motifs_as_grid:
+            if data.shape[0] == 1:
+                pl.plot_grid_motiflets(
+                    self.ds_name,
+                    raw_data,
+                    self.motiflets,
+                    self.elbow_points,
+                    self.dists,
+                    motif_length,
+                    method_name=plot_method_name,
+                    show_elbows=False,
+                    font_size=24,
+                    ground_truth=plot_ground_truth)
+            else:
+                pl.plot_motifset(
+                    self.ds_name,
+                    data,
+                    motifsets=candidates[elbows[0]][0],
+                    motif_length=motif_length,
+                    ground_truth=plot_ground_truth,
+                    show=True)
+
+        return self.dists, self.motiflets, self.elbow_points
+
+    def plot_dataset(self, max_points=10_000, path=None):
+        fig, ax = pl.plot_dataset(
+            self.ds_name,
+            self.series,
+            max_points=max_points,
+            show=path is None,
+            ground_truth=self.ground_truth)
+
+        if path is not None:
+            plt.savefig(path)
+            plt.show()
+
+        return fig, ax
+
+    def plot_motifset(self, max_points=10_000, path=None, elbow_point=None):
+        """Plots the motif set for a given elbow point."""
+
+        if self.dists is None or self.motiflets is None or self.elbow_points is None:
+            raise Exception("Please call fit_k_elbow first.")
+
+        if elbow_point is None:
+            elbow_point = self.elbow_points[0][-1]
+
+        fig, ax = pl.plot_motifset(
+            self.ds_name,
+            self.series,
+            max_points=max_points,
+            motifsets=self.motiflets[elbow_point].reshape((1, -1)),
+            motif_length=self.motif_length,
+            show=path is None)
+
+        if path is not None:
+            plt.savefig(path)
+            plt.show()
+
+        return fig, ax
+
+    def flatten_data(self, max_items=None):
+        return flatten_elbows(
+            self.elbow_points,
+            self.motiflets,
+            self.dists,
+            max_items=max_items)
 
 
 def as_series(data, index_range, index_name):
@@ -270,6 +561,7 @@ def read_dataset(dataset, sampling_factor=10000):
     print("Dataset Sampled Length n: ", len(data))
 
     return zscore(data)
+
 
 # fastmath=True,
 @njit(cache=True)
@@ -663,8 +955,9 @@ def get_pairwise_extent_raw(
 
     return motifset_extent
 
+
 # FIXME: adding fastmath=True breaks the code???
-@njit(cache=True)   # fastmath breaks the CODE: np.isinf does not work???
+@njit(cache=True)  # fastmath breaks the CODE: np.isinf does not work???
 def _argknn(
         dist, k, m, lowest_dist=np.inf, slack=0.5):
     """Finds the closest k-NN non-overlapping subsequences in candidates.
@@ -1010,7 +1303,6 @@ def find_au_ef_motif_length(
         data,
         k_max,
         motif_length_range,
-        exclusion=None,
         n_jobs=4,
         elbow_deviation=1.00,
         slack=0.5,
@@ -1030,8 +1322,6 @@ def find_au_ef_motif_length(
         The interval of k's to compute the area of a single AU_EF.
     motif_length_range : array-like
         The range of lengths to compute the AU-EF.
-    exclusion : 2d-array
-        exclusion zone - use when searching for the TOP-2 motiflets
     n_jobs : int
         Number of jobs to be used.
     elbow_deviation : float, default=1.00
@@ -1088,7 +1378,6 @@ def find_au_ef_motif_length(
                 data,
                 m_sub,
                 n_jobs=n_jobs,
-                exclusion=exclusion,
                 elbow_deviation=elbow_deviation,
                 slack=slack,
                 distance=distance,
@@ -1149,7 +1438,6 @@ def search_k_motiflets_elbow(
         data,
         motif_length='auto',
         motif_length_range=None,
-        exclusion=None,
         elbow_deviation=1.00,
         filter=True,
         slack=0.5,
@@ -1181,8 +1469,6 @@ def search_k_motiflets_elbow(
         Can be used to determine to length of the motif set automatically.
         If a range is passed and `motif_length == 'auto'`, the best window length
         is first determined, prior to computing the elbow-plot.
-    exclusion : 2d-array (default=None)
-        exclusion zone - use when searching for the TOP-2 motiflets
     approximate_motiflet_pos : array-like (default=None)
         An initial estimate of the positions of the k-Motiflets for each k in the
         given range [2...k_max]. Will be used for bounding distance computations.
@@ -1276,10 +1562,10 @@ def search_k_motiflets_elbow(
 
         if backend == "scampi":
             backend_imlp = SCAMPINearestNeighbors(
-                    m, k_max_,
-                    top_k=top_N,
-                    slack=slack,
-                    **kwargs)
+                m, k_max_,
+                top_k=top_N,
+                slack=slack,
+                **kwargs)
 
             k_motiflet_distances, k_motiflet_candidates, memory_usage \
                 = backend_imlp.compute_knns(data_raw)
@@ -1348,7 +1634,7 @@ def search_k_motiflets_elbow(
 
     # smoothen the line to make it monotonically increasing
     k_motiflet_distances[0:2] = k_motiflet_distances[2]
-    for i in range(len(k_motiflet_distances)-1, 2, -1):
+    for i in range(len(k_motiflet_distances) - 1, 2, -1):
         k_motiflet_distances[i - 1] = (
             np.minimum(k_motiflet_distances[i], k_motiflet_distances[i - 1]))
 

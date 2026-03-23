@@ -1,3 +1,4 @@
+from motiflets.motiflets import *
 from motiflets.plotting import *
 
 def generate_rectangular_wave(motif_length):

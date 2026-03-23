@@ -3,7 +3,7 @@ import pandas as pd
 
 import utils as ut
 from motiflets.distances import *
-from motiflets.motiflets import _sliding_dot_product, _argknn, get_pairwise_extent_raw
+from motiflets.motiflets import _sliding_dot_product, _argknn
 
 from numba.typed import List
 from numba import njit, prange

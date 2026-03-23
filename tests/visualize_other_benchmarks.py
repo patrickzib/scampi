@@ -2,7 +2,8 @@ import glob
 import os
 import numpy as np
 
-from motiflets.plotting import Motiflets
+from motiflets.motiflets import *
+from motiflets.plotting import *
 
 import pandas as pd
 

@@ -6,6 +6,7 @@ sys.path.insert(0, "../")
 import matplotlib as mpl
 
 import utils as ut
+from motiflets.motiflets import *
 from motiflets.plotting import *
 
 mpl.rcParams['figure.dpi'] = 150
