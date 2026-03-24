@@ -35,8 +35,8 @@ def test_motiflets_sparse():
     lengths = [
         #1_000,
         #5_000,
-        #10_000,
-        30_000,
+        10_000,
+        #30_000,
         #50_000,
         #100_000,
         #150_000,
@@ -77,7 +77,7 @@ def test_motiflets_sparse():
                     22,
                     plot_elbows=True,
                     plot_motifs_as_grid=True,
-                    top_N = 1
+                    top_N = 3
                 )
 
                 # ml.plot_motifset()

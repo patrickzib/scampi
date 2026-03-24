@@ -169,7 +169,6 @@ def plot_motifset(
     color_offset = 1
     offset = 0
     tick_offsets = []
-    # y_labels = []
     axes[0, 0].set_title(ds_name, fontsize=22)
 
     for dim in range(data_raw.shape[0]):
@@ -423,7 +422,8 @@ def _plot_elbow_points(
     ax.set(xlabel='Size (k)', ylabel='Extent')
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-    motiflets = motifset_candidates[ebs][0]
+    # motiflets = motifset_candidates[ebs][0]
+    motiflets = [motifset_candidates[eb][0] for eb in ebs]
     for i, motiflet in enumerate(motiflets):
         if motiflet is not None:
             axins = ax.inset_axes(
@@ -450,6 +450,7 @@ def _plot_elbow_points(
 def plot_grid_motiflets(
         ds_name, data, motifsets_, elbow_points_, dist_,
         motif_length, font_size=20,
+        max_items=None,
         ground_truth=None,
         method_name=None,
         method_names=None,
@@ -504,8 +505,8 @@ def plot_grid_motiflets(
 
     label_cols = 2
 
-    (elbow_points, motifsets, dist) \
-        = ml.flatten_elbows(elbow_points_, motifsets_, dist_)
+    (dists, motiflets, elbow_points) \
+        = ml.flatten_elbows(elbow_points_, motifsets_, dist_, max_items=max_items)
 
     count_plots = 3 if len(motifsets[elbow_points]) > 6 else 2
     if show_elbows:

@@ -262,6 +262,7 @@ class Motiflets:
                     self.elbow_points,
                     self.dists,
                     motif_length,
+                    max_items=self.top_N if self.top_N > 1 else None,
                     method_name=plot_method_name,
                     show_elbows=False,
                     font_size=24,
@@ -314,7 +315,10 @@ class Motiflets:
 
         return fig, ax
 
-    def flatten_data(self, max_items=None):
+    def get_flattened_motifs(self, max_items=None):
+        if self.dists is None or self.motiflets is None or self.elbow_points is None:
+            raise Exception("Please call fit_k_elbow first.")
+
         return flatten_elbows(
             self.elbow_points,
             self.motiflets,
@@ -413,9 +417,9 @@ def flatten_elbows(elbow_points, candidates, dists, max_items=None):
 
     flat_elbows = np.arange(len(flat_candidates), dtype=np.int32)
     return (
-        flat_elbows,
-        np.array(flat_candidates, dtype=object),
         np.array(flat_dists, dtype=np.float64),
+        np.array(flat_candidates, dtype=object),
+        flat_elbows,
     )
 
 
@@ -1085,7 +1089,6 @@ def get_approximate_k_motiflet(
 
     # order by increasing k-nn distance
     best_order = np.argsort(knn_distances)
-    current_bound = upper_bound
 
     for i, order in enumerate(best_order):
         idx = knns[order, :k]
@@ -1538,14 +1541,13 @@ def search_k_motiflets_elbow(
     pid = os.getpid()
     process = psutil.Process(pid)
 
-    # non-overlapping motifs only
-    n = data_raw.shape[-1] - m + 1
-
     if m <= 0:
         raise ValueError("motif_length must be > 0")
     if slack <= 0:
         raise ValueError("slack must be > 0")
 
+    # non-overlapping motifs only
+    n = data_raw.shape[-1] - m + 1
     k_max_ = max(3, min(int(n // (m * slack)), k_max))
 
     # non-overlapping motifs only
