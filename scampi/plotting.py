@@ -13,8 +13,8 @@ from matplotlib.ticker import MaxNLocator
 from scipy.stats import zscore
 from tsdownsample import MinMaxLTTBDownsampler
 
-import motiflets.motiflets as ml
-from motiflets.distances import *
+import scampi.scampi as ml
+from scampi.distances import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -422,7 +422,7 @@ def _plot_elbow_points(
     ax.set(xlabel='Size (k)', ylabel='Extent')
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-    # motiflets = motifset_candidates[ebs][0]
+    # scampi = motifset_candidates[ebs][0]
     motiflets = [motifset_candidates[eb][0] for eb in ebs]
     for i, motiflet in enumerate(motiflets):
         if motiflet is not None:
@@ -505,7 +505,7 @@ def plot_grid_motiflets(
 
     label_cols = 2
 
-    (dists, motiflets, elbow_points) \
+    (dist, motifsets, elbow_points) \
         = ml.flatten_elbows(elbow_points_, motifsets_, dist_, max_items=max_items)
 
     count_plots = 3 if len(motifsets[elbow_points]) > 6 else 2

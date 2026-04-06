@@ -1,8 +1,8 @@
 import os
 os.environ["RUST_LOG"] = "error"
 
-from motiflets.motiflets import *
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -54,7 +54,7 @@ def test_motiflets_sparse():
                 series = B.iloc[:length, 0].T
 
                 print("Distance", distance)
-                ml = Motiflets(
+                ml = SCAMPI(
                     ds_name,
                     series,
                     distance=distance,

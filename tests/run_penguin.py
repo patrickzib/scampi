@@ -6,8 +6,8 @@ sys.path.insert(0, "../")
 import scipy.io as sio
 
 import utils as ut
-from motiflets.motiflets import *
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -21,7 +21,7 @@ def test_plot_data():
     ds_name, series = read_penguin_1m()
     series = series.iloc[497699 - 5000: 497699 + 5000, 0].T
 
-    ml = Motiflets(ds_name, series)
+    ml = SCAMPI(ds_name, series)
     points_to_plot = 10_000
     ml.plot_dataset(
         max_points=points_to_plot,
@@ -60,7 +60,7 @@ def test_plotting():
     ds_name, ts = read_penguin_1m()
     ts = ts.iloc[497699 - 50_000: 497699 + 50_000, -2]
 
-    mm = Motiflets(ds_name, ts)
+    mm = SCAMPI(ds_name, ts)
     mm.plot_dataset(path="results/images/penguin_data_raw.pdf")
 
 

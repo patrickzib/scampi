@@ -18,19 +18,22 @@ pyattimo_logger.setLevel(logging.CRITICAL)
 import math
 
 import pandas as pd
+
+from matplotlib import pyplot as plt
+
 from numba import objmode
 from numba.typed import Dict, List
 from scipy.signal import argrelextrema
 from scipy.stats import zscore
 
-import motiflets.plotting as pl
-from motiflets.knn_vector_backend import *
-from motiflets.knn_scampi_backend import *
-from motiflets.distances import *
-from motiflets.maxheap import MaxHeap
+import scampi.plotting as pl
+from scampi.knn_vector_backend import *
+from scampi.knn_scampi_backend import *
+from scampi.distances import *
+from scampi.maxheap import MaxHeap
 
 
-class Motiflets:
+class SCAMPI:
 
     def __init__(
             self,
@@ -199,18 +202,18 @@ class Motiflets:
             motif_length: int
                 the length of the motif (user parameter)
             filter: bool, default=True
-                filters overlapping motiflets from the result,
+                filters overlapping scampi from the result,
             top_N : int, default=1
-                Number of best motiflets to return per k.
+                Number of best scampi to return per k.
             plot_elbows: bool, default=False
                 plots the elbow ploints into the plot
             plot_motifs_as_grid: bool, default=True
-                plot_plots the motiflets as grid into the plot
+                plot_plots the scampi as grid into the plot
             plot_ground_truth: pd.Series (default=None)
                 Ground-truth information as pd.Series.
             plot_method_name: str, default=None
                 The name of the method to be plotted in the title when plotting
-                motiflets as grid.
+                scampi as grid.
 
             Returns
             -------
@@ -1058,15 +1061,15 @@ def get_approximate_k_motiflet(
     upper_bound : float
         Used for admissible pruning
     top_N : int
-        Number of best motiflets to return
+        Number of best scampi to return
 
     Returns
     -------
     Tuple
         motiflet_candidates : np.array
-            The (approximate) best motiflets found
+            The (approximate) best scampi found
         motiflet_dists:
-            The extents of the motiflets found
+            The extents of the scampi found
         motiflet_all_candidates : np.array
             All candidates found during the search, with k-NNs for each subsequence
             in the time series. The first k elements are the k-NNs, the rest is -1.
@@ -1480,7 +1483,7 @@ def search_k_motiflets_elbow(
         It measures the absolute change in deviation from k to k+1.
         1.05 corresponds to 5% increase in deviation.
     filter: bool, default=True (user parameter)
-        filters overlapping motiflets from the result,
+        filters overlapping scampi from the result,
     slack: float (default=0.5)
         Defines an exclusion zone around each subsequence to avoid trivial matches.
         Defined as percentage of m. E.g. 0.5 is equal to half the window length.
@@ -1496,7 +1499,7 @@ def search_k_motiflets_elbow(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
     top_N : int
-        Number of best motiflets to return per k.
+        Number of best scampi to return per k.
 
     Returns
     -------
