@@ -46,7 +46,7 @@ class SCAMPINearestNeighbors:
             self.scampi_max_memory = kwargs["scampi_max_memory"]
             print(f"Setting SCAMPI max memory to {self.scampi_max_memory}")
         else:
-            self.scampi_max_memory = "8 GB"
+            self.scampi_max_memory = "4 GB"
 
 
     def compute_knns(self, X):
@@ -83,7 +83,7 @@ class SCAMPINearestNeighbors:
             'support': self.k_max - 1,
             'exclusion_zone': int(self.m * self.slack),
             'max_memory': self.scampi_max_memory,
-            'observability_file': None # "observe.csv"
+            'observability_file': None  # "observe.csv"
         }
 
         if self.scampi_delta:
