@@ -2,8 +2,8 @@ import os
 import psutil
 import numpy as np
 
-#from motiflets.distances import *
-#from motiflets.motiflets import _sliding_dot_product, _argknn, get_pairwise_extent_raw
+#from scampi.distances import *
+#from scampi.scampi import _sliding_dot_product, _argknn, get_pairwise_extent_raw
 #from numba import njit, prange
 
 
@@ -16,7 +16,7 @@ class SCAMPINearestNeighbors:
     motif_length : int
         Length of motifs to discover (must be positive)
     k_max : int
-        Maximum number of motiflets to discover (must be positive)
+        Maximum number of scampi to discover (must be positive)
     slack : float, default=0.5
         Exclusion zone factor for motif discovery (0.0 to 1.0)
     verbose : bool, default=True
@@ -114,7 +114,7 @@ class SCAMPINearestNeighbors:
 
         try:
             if self.verbose:
-                print("\tComputing motiflets with SCAMPI...", flush=True)
+                print("\tComputing scampi with SCAMPI...", flush=True)
 
             for mot in m_iter:
                 if self.verbose:
@@ -150,7 +150,7 @@ class SCAMPINearestNeighbors:
 # @njit(cache=True, parallel=True)
 # def compute_knn(
 #         ts,
-#         motiflets,
+#         scampi,
 #         m,
 #         k,
 #         slack=0.5,
@@ -163,11 +163,11 @@ class SCAMPINearestNeighbors:
 #
 #     preprocessing = distance_preprocessing(ts, m)
 #
-#     knns = np.zeros((len(motiflets), k), dtype=np.int32)
-#     extents = np.zeros(len(motiflets), dtype=np.float64)
+#     knns = np.zeros((len(scampi), k), dtype=np.int32)
+#     extents = np.zeros(len(scampi), dtype=np.float64)
 #
-#     for i in prange(len(motiflets)):
-#         start = motiflets[i]
+#     for i in prange(len(scampi)):
+#         start = scampi[i]
 #         if start < len(ts) - m + 1:
 #             dot_rolled = _sliding_dot_product(
 #                 ts[start:start + m],

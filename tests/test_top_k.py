@@ -1,5 +1,5 @@
-from motiflets.motiflets import *
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 
 def test_motiflet_top_k():
@@ -7,7 +7,7 @@ def test_motiflet_top_k():
     ds_name = "Muscle Activation"
     series, df_gt = read_dataset_with_index(file)
 
-    ml = Motiflets(ds_name, series, df_gt)
+    ml = SCAMPI(ds_name, series, df_gt)
     ml.plot_dataset()
 
     k = 15

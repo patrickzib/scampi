@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
-from motiflets import Motiflets
+from scampi import SCAMPI
 from plotting import plot_motifset
 import utils as ut
 
@@ -83,7 +83,7 @@ def test_plot():
         # filename = interesting[name]
         ts = ut.read_mat(ds_name)
 
-        # ml = Motiflets(ds_name, ts)
+        # ml = SCAMPI(ds_name, ts)
         # ml.plot_dataset(
         #     max_points=points_to_plot,
         #     path=f"images/datasets/{name.lower().replace(' ', '_')}.pdf"
