@@ -83,7 +83,7 @@ class SCAMPINearestNeighbors:
             'support': self.k_max - 1,
             'exclusion_zone': int(self.m * self.slack),
             'max_memory': self.scampi_max_memory,
-            # 'observability_file': "observe.csv"
+            'observability_file': None # "observe.csv"
         }
 
         if self.scampi_delta:
@@ -133,6 +133,10 @@ class SCAMPINearestNeighbors:
                       f"\n\t\tExtent: {k_motiflet_distances[-1]}", flush=True)
 
             memory_usage = process.memory_info().rss / (1024 * 1024)  # MB
+
+            times = m_iter.timings()
+            print(f"\tTime for Build {times.get('repetition_setup_s', 'n/a')}")
+            print(f"\tTime for Test {times.get('pair_discovery_s', 'n/a')}")
 
         except Exception as e:
             print(f"SCAMPI computation failed: {str(e)}", flush=True)
