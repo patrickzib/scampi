@@ -5,13 +5,13 @@ import multiprocessing
 
 import scipy.io as sio
 
-from motiflets.motiflets import *
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 warnings.simplefilter("ignore")
 
 run_local = True
-path = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp/"
+path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
 if os.path.exists(path) and os.path.isdir(path):
     run_local = False
 else:
@@ -237,7 +237,7 @@ def test_motiflets_scale_n(
                       f"New Window {l_new}")
 
             try:
-                mm = Motiflets(
+                mm = SCAMPI(
                     ds_name,
                     ts,
                     backend=backend,
@@ -295,7 +295,7 @@ def test_motiflets_scale_n(
                 df_single.loc[len(df_single.index)] = current_single
                 df_single.to_csv(new_filename + ".csv", index=False)
 
-                print(f"\tDiscovered motiflets in {duration:0.2f} seconds")
+                print(f"\tDiscovered scampi in {duration:0.2f} seconds")
                 print("\t'length', 'motif length', 'backend', 'time in s', "
                       "'memory in MB', 'extent', 'motiflet', 'elbows'")
                 print("\t" + str(current[0]), *current[1:], sep=', ')

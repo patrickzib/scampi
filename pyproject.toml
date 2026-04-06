@@ -1,12 +1,12 @@
 [project]
 name = "scampi"
 
-version = "0.1.1"
+version = "0.1.2"
 
 description = "SCAMPI - Fast Pattern Discovery in Massive Time Series"
 readme = "README.md"
 authors = [
-    {name = "patrickzib", email = "patrick.schaefer@hu-berlin.de"}
+    {name = "XYZ", email = "XYZ"}
 ]
 keywords = [
     "machine-learning",

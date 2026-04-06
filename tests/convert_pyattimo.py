@@ -1,8 +1,8 @@
 import pandas as pd
 
 import utils as ut
-from motiflets.distances import *
-from motiflets.motiflets import _sliding_dot_product, _argknn
+from scampi.distances import *
+from scampi.scampi import _sliding_dot_product, _argknn
 
 from numba.typed import List
 from numba import njit, prange, set_num_threads

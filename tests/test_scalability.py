@@ -1,4 +1,8 @@
-from motiflets.plotting import *
+import os
+os.environ["RUST_LOG"] = "error"
+
+from scampi.scampi import *
+from scampi.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -31,11 +35,11 @@ def test_motiflets_sparse():
     lengths = [
         #1_000,
         #5_000,
-        #10_000,
+        10_000,
         #30_000,
         #50_000,
         #100_000,
-        150_000,
+        #150_000,
         #200_000,
         #250_000
     ]
@@ -46,29 +50,37 @@ def test_motiflets_sparse():
     for i, length in enumerate(lengths):
         print("--------------------")
         for distance in ["znormed_ed"]:
-            for backend in ["scalable"]:
+            for backend in ["default"]:
                 series = B.iloc[:length, 0].T
 
                 print("Distance", distance)
-                ml = Motiflets(
+                ml = SCAMPI(
                     ds_name,
                     series,
                     distance=distance,
                     n_jobs=-1,
-                    backend=backend
+                    backend=backend,
+                    scampi_max_memory="1GB"
                 )
 
                 k_max = 10
 
                 t_before = time.time()
+
+                length = ml.fit_motif_length(
+                   k_max,
+                   np.array([22, 50, 222], dtype=np.int32),
+                )
+
                 extent, motiflets, _ = ml.fit_k_elbow(
                     k_max,
                     22,
-                    plot_elbows=False,
-                    plot_motifs_as_grid=False
+                    plot_elbows=True,
+                    plot_motifs_as_grid=True,
+                    top_N = 3
                 )
 
-                ml.plot_motifset()
+                # ml.plot_motifset()
 
                 t_after = time.time()
                 time_s[i] = t_after - t_before
