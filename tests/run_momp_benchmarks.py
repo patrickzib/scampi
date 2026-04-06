@@ -12,7 +12,7 @@ import utils as ut
 
 
 run_local = True
-path = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp/"
+path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
 if os.path.exists(path) and os.path.isdir(path):
     run_local = False
 

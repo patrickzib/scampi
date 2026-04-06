@@ -6,7 +6,8 @@ sys.path.insert(0, "../")
 import matplotlib as mpl
 
 import utils as ut
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 mpl.rcParams['figure.dpi'] = 150
 
@@ -42,7 +43,7 @@ def test_plot_data():
     ts = series
     print(f"Loaded dataset PAMAP with length {len(ts)}")
 
-    ml = Motiflets(ds_name, ts)
+    ml = SCAMPI(ds_name, ts)
     points_to_plot = 10_000
     ml.plot_dataset(
         max_points=points_to_plot,

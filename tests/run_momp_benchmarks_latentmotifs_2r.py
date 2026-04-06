@@ -15,11 +15,11 @@ import numpy as np
 import utils as ut
 
 from competitors.latentmotifs import LatentMotif
-from motiflets.motiflets import get_pairwise_extent_raw
-from motiflets.distances import map_distances
+from scampi.scampi import get_pairwise_extent_raw
+from scampi.distances import map_distances
 
 run_local = True
-path = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp/"
+path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
 if os.path.exists(path) and os.path.isdir(path):
     run_local = False
 
@@ -84,7 +84,7 @@ def run_safe(
 
                 memory_usage = process.memory_info().rss / (1024 * 1024)  # MB
 
-                print(f"\tDiscovered motiflets in {duration:0.2f} seconds")
+                print(f"\tDiscovered scampi in {duration:0.2f} seconds")
                 print(f"\tMemory usage: {memory_usage:0.2f} MB")
 
                 motif_set = np.array(lm.prediction_mask_[1])[0]

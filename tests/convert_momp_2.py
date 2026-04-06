@@ -2,8 +2,8 @@ import ast
 import pandas as pd
 
 import utils as ut
-from motiflets.distances import *
-from motiflets.motiflets import _sliding_dot_product, _argknn, get_pairwise_extent_raw
+from scampi.distances import *
+from scampi.scampi import _sliding_dot_product, _argknn, get_pairwise_extent_raw
 
 from numba import njit, prange
 
@@ -148,8 +148,8 @@ def compute_knn(
     best_motiflet = knns[min_pos]
     min_extent = extents[min_pos]
 
-    #print(preprocessing[0][1][motiflets[0]])
-    #print(preprocessing[0][1][motiflets[1]])
+    #print(preprocessing[0][1][scampi[0]])
+    #print(preprocessing[0][1][scampi[1]])
 
     if len(motiflets) == k:
         extend = get_pairwise_extent_raw(a, motiflets, m, distance_single, preprocessing)

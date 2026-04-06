@@ -1,8 +1,7 @@
 import glob
-import os
-import numpy as np
 
-from motiflets.plotting import Motiflets
+from scampi.scampi import *
+from scampi.plotting import *
 
 import pandas as pd
 
@@ -31,7 +30,7 @@ def plot_motifset(
         k
     ):
     ds_name, series = read_data()
-    ml = Motiflets(ds_name, series)
+    ml = SCAMPI(ds_name, series)
     ml.motif_length = motif_length
     ml.motiflets = motifsets
 

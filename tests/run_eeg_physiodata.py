@@ -4,7 +4,8 @@ sys.path.insert(0, "../")
 sys.path.insert(0, "../../")
 
 import utils as ut
-from motiflets.plotting import *
+from scampi.scampi import *
+from scampi.plotting import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -26,7 +27,7 @@ def read_data():
 
 def test_plot_data():
     ds_name, series = read_data()
-    ml = Motiflets(
+    ml = SCAMPI(
         ds_name, series, backend="scampi"
     )
     points_to_plot = 10_000
