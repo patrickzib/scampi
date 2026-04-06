@@ -27,15 +27,8 @@ experiments used in the evaluation.
 
 ## SCAMPI (SCalable Anytime Mining of Patterns In time series)
 
-This paper introduces SCAMPI (scalable Anytime Mining of Pat-
-terns under Euclidean Distance). SCAMPI is a fast LSH-based backend for
-discovering motif sets in massive time series.
-The code builds upon the Motiflets definition of 
-motif sets but was systematically designed from the
-ground up to exploit commodity multi-core hardware and SOTA
-data structures while maintaining high precision. To overcome
-the inherent quadratic-time bottleneck of motif search, SCAMPI
-employs Locality-Sensitive Hashing (LSH) to aggressively prune
+This paper introduces SCAMPI 
+(scalable Anytime Mining of Pat terns under Euclidean Distance). 
 
 ## Installation
 
@@ -43,7 +36,7 @@ The easiest is to use pip to install motiflets.
 
 ### a) Install using pip
 ```
-pip install scampi
+TODO
 ```
 
 You can also install  the project from source.
@@ -70,9 +63,8 @@ from scampi.scampi import *
 
 ml = SCAMPI(
     ds_name,  # dataset name
-    series,  # time series data
-    n_jobs,  # number of CPU cores
-    backend="default"  # choose a backend for motif discovery
+    series,   # time series data
+    n_jobs    # number of CPU cores
 )
 
 k_max = 20  # maximum motif set size to consider
@@ -87,10 +79,3 @@ dists, candidates, elbow_points = ml.fit_k_elbow(
 
 ml.plot_motifset()
 ```
-
-
-
-## Raw Experimental Results
-
-All raw benchmark results reported in the paper are available in `tests/csvs/` for full 
-reproducibility.
