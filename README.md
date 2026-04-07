@@ -36,7 +36,7 @@ The easiest is to use pip to install motiflets.
 
 ### a) Install using pip
 ```
-TODO
+BLINDED
 ```
 
 You can also install  the project from source.
@@ -64,7 +64,8 @@ from scampi.scampi import *
 ml = SCAMPI(
     ds_name,  # dataset name
     series,   # time series data
-    n_jobs    # number of CPU cores
+    n_jobs,    # number of CPU cores
+    scampi_max_memory = "1 GB"  # max-memory to use for SCAMPI
 )
 
 k_max = 20  # maximum motif set size to consider
