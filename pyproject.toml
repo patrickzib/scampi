@@ -6,7 +6,7 @@ version = "0.1.2"
 description = "SCAMPI - Fast Pattern Discovery in Massive Time Series"
 readme = "README.md"
 authors = [
-    {name = "XYZ", email = "XYZ"}
+    {name = "XYZ", email = "do-not-mail@anonymous.com"}
 ]
 keywords = [
     "machine-learning",
