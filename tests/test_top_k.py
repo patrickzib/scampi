@@ -7,7 +7,12 @@ def test_motiflet_top_k():
     ds_name = "Muscle Activation"
     series, df_gt = read_dataset_with_index(file)
 
-    ml = SCAMPI(ds_name, series, df_gt)
+    ml = SCAMPI(
+        ds_name,
+        series,
+        df_gt,
+        scampi_max_memory="1GB"
+    )
     ml.plot_dataset()
 
     k = 15

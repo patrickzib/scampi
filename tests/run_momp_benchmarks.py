@@ -179,7 +179,9 @@ def main():
         # scalable
         backend = "scalable"
         ut.run_safe(
-          filename, data, l_range, k_max, backend # , subsampling=10
+          filename, data, l_range, k_max, backend,
+            scampi_max_memory = "4GB"
+            # , subsampling=10
         )
 
         # # subsampling
