@@ -65,7 +65,8 @@ ml = SCAMPI(
     ds_name,  # dataset name
     series,   # time series data
     n_jobs,    # number of CPU cores
-    scampi_max_memory = "1 GB"  # max-memory to use for SCAMPI
+    scampi_max_memory = "1 GB",  # max-memory to use for SCAMPI
+    scampi_delta = "0.1" 
 )
 
 k_max = 20  # maximum motif set size to consider
