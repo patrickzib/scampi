@@ -33,11 +33,11 @@ def test_plot_data():
 
 def run_motiflets_scale_n(
         backends=["scampi"],
-        delta=None,
+        delta=0.1,
         k_max = 10,
 ):
     n_range = [650_000]
-    l_range = [1024, 2048, 4096]
+    l_range = reversed([1024, 2048, 4096, 8192])
 
     for backend in backends:
         ut.test_motiflets_scale_n(

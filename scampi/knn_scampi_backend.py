@@ -38,7 +38,7 @@ class SCAMPINearestNeighbors:
         self.top_k = top_k
         self.verbose = verbose
 
-        self.scampi_delta = None
+        self.scampi_delta = 0.1     # default value
         if "scampi_delta" in kwargs:
             self.scampi_delta = kwargs["scampi_delta"]
 
@@ -83,7 +83,7 @@ class SCAMPINearestNeighbors:
             'support': self.k_max - 1,
             'exclusion_zone': int(self.m * self.slack),
             'max_memory': self.scampi_max_memory,
-            'observability_file': None  # "observe.csv"
+            'observability_file': None   # "observe.csv"
         }
 
         if self.scampi_delta:
