@@ -47,6 +47,16 @@ filenames = {
     "SynchrophasorEventsLarge": ["Synchrophasor Events Large", 65536, "?",62208000],
 }
 
+def pretty(x):
+    if isinstance(x, np.ndarray):
+        return np.array2string(
+            x,
+            threshold=10,      # summarize large arrays
+            edgeitems=3,
+            max_line_width=1000,
+            separator=", "
+        )
+    return str(x)
 
 def read_mat(filename):
     print(f"\tReading {filename} from {path + filename + '.mat'}")
@@ -298,7 +308,8 @@ def test_motiflets_scale_n(
                 print(f"\tDiscovered scampi in {duration:0.2f} seconds")
                 print("\t'length', 'motif length', 'backend', 'time in s', "
                       "'memory in MB', 'extent', 'motiflet', 'elbows'")
-                print("\t" + str(current[0]), *current[1:], sep=', ')
+                # print("\t" + str(current[0]), *current[1:], sep=', ')
+                print("\t" + ", ".join(pretty(x) for x in current))
 
                 del mm  # free up memory
             except Exception as e:

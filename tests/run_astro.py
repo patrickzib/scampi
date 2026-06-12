@@ -37,7 +37,7 @@ def run_motiflets_scale_n(
         k_max = 10,
     ):
     n_range = [1_151_350]
-    l_range = reversed([1024, 2048, 4096, 8096])
+    l_range = reversed([1024, 2048, 4096, 8192])
 
     for backend in backends:
         ut.test_motiflets_scale_n(
@@ -47,7 +47,7 @@ def run_motiflets_scale_n(
             k_max,
             backend=backend,
             scampi_delta=delta,
-            scampi_max_memory="2GB"
+            scampi_max_memory="1GB"
         )
 
 
