@@ -46,7 +46,7 @@ class SCAMPINearestNeighbors:
             self.scampi_max_memory = kwargs["scampi_max_memory"]
             print(f"Setting SCAMPI max memory to {self.scampi_max_memory}")
         else:
-            self.scampi_max_memory = "4 GB"
+            self.scampi_max_memory = "1 GB"
 
 
     def compute_knns(self, X):

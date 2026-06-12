@@ -24,7 +24,10 @@ def read_data():
 
 def test_plot_data():
     ds_name, series = read_data()
-    ml = SCAMPI(ds_name, series)
+    ml = SCAMPI(
+        ds_name,
+        series
+    )
     points_to_plot = 10_000
     ml.plot_dataset(
         max_points=points_to_plot,
@@ -37,7 +40,7 @@ def run_motiflets_scale_n(
         k_max = 10,
     ):
     n_range = [2049280]
-    l_range = [512, 1024, 2048, 4096]
+    l_range = reversed([1024, 2048, 4096])
 
     for backend in backends:
         ut.test_motiflets_scale_n(
@@ -46,7 +49,8 @@ def run_motiflets_scale_n(
             l_range,
             k_max,
             backend=backend,
-            scampi_delta=delta
+            scampi_delta=delta,
+            scampi_max_memory="2GB"
         )
 
 

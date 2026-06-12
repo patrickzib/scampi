@@ -36,12 +36,12 @@ def test_motiflets_sparse():
         #1_000,
         #5_000,
         10_000,
-        #30_000,
-        #50_000,
-        #100_000,
-        #150_000,
-        #200_000,
-        #250_000
+        30_000,
+        50_000,
+        100_000,
+        150_000,
+        200_000,
+        250_000
     ]
 
     ds_name, B = read_penguin_data()
@@ -75,8 +75,8 @@ def test_motiflets_sparse():
                 extent, motiflets, _ = ml.fit_k_elbow(
                     k_max,
                     22,
-                    plot_elbows=True,
-                    plot_motifs_as_grid=True,
+                    plot_elbows=False,
+                    plot_motifs_as_grid=False,
                     top_N = 3
                 )
 

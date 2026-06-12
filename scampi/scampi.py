@@ -308,7 +308,7 @@ class SCAMPI:
             self.ds_name,
             self.series,
             max_points=max_points,
-            motifsets=self.motiflets[elbow_point].reshape((1, -1)),
+            motifsets=np.array(self.motiflets[elbow_point]).reshape((1, -1)),
             motif_length=self.motif_length,
             show=path is None)
 
