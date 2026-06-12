@@ -60,7 +60,7 @@ def test_motiflets_sparse():
                     distance=distance,
                     n_jobs=-1,
                     backend=backend,
-                    scampi_max_memory="1GB"
+                    scampi_max_memory="2GB"
                 )
 
                 k_max = 10

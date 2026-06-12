@@ -48,7 +48,7 @@ def run_motiflets_scale_n(
             k_max,
             backend=backend,
             scampi_delta=delta,
-            scampi_max_memory="1GB"
+            scampi_max_memory="2GB"
         )
 
 
