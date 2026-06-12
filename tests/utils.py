@@ -2,6 +2,7 @@ import gc
 import traceback
 import warnings
 import multiprocessing
+from pprint import pformat
 
 import scipy.io as sio
 
@@ -46,17 +47,6 @@ filenames = {
     "recorddata": ["EOG Example", 2048, "?", 59430000],
     "SynchrophasorEventsLarge": ["Synchrophasor Events Large", 65536, "?",62208000],
 }
-
-def pretty(x):
-    if isinstance(x, np.ndarray):
-        return np.array2string(
-            x,
-            threshold=10,      # summarize large arrays
-            edgeitems=3,
-            max_line_width=1000,
-            separator=", "
-        )
-    return str(x)
 
 def read_mat(filename):
     print(f"\tReading {filename} from {path + filename + '.mat'}")
@@ -309,7 +299,7 @@ def test_motiflets_scale_n(
                 print("\t'length', 'motif length', 'backend', 'time in s', "
                       "'memory in MB', 'extent', 'motiflet', 'elbows'")
                 # print("\t" + str(current[0]), *current[1:], sep=', ')
-                print("\t" + ", ".join(pretty(x) for x in current))
+                print("\t" + pformat(current, width=120, compact=True))
 
                 del mm  # free up memory
             except Exception as e:
