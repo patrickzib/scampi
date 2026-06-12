@@ -33,7 +33,7 @@ def test_plot_data():
 
 def run_motiflets_scale_n(
         backends=["scampi"],
-        delta=None,
+        delta=0.1,
         k_max = 10,
     ):
     n_range = [1_151_350]
@@ -47,7 +47,7 @@ def run_motiflets_scale_n(
             k_max,
             backend=backend,
             scampi_delta=delta,
-            scampi_max_memory="1GB"
+            scampi_max_memory="2GB"
         )
 
 
