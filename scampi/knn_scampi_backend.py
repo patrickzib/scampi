@@ -46,8 +46,9 @@ class SCAMPINearestNeighbors:
             self.scampi_max_memory = kwargs["scampi_max_memory"]
         else:
             self.scampi_max_memory = "2 GB"
-        print(f"Setting SCAMPI max memory to {self.scampi_max_memory}")
 
+        print(f"Setting SCAMPI delta to {self.scampi_delta}")
+        print(f"Setting SCAMPI max memory to {self.scampi_max_memory}")
 
     def compute_knns(self, X):
         """Compute k-nearest neighbors using SCAMPI motiflet discovery."""
