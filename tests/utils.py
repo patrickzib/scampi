@@ -3,12 +3,17 @@ import os
 import traceback
 import warnings
 import multiprocessing
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys_path = str(PROJECT_ROOT)
 if sys_path not in os.sys.path:
     os.sys.path.insert(0, sys_path)
+
+if "MPLCONFIGDIR" not in os.environ:
+    cache_name = f"scampi-matplotlib-{os.getuid()}-{os.getpid()}"
+    os.environ["MPLCONFIGDIR"] = str(Path(tempfile.gettempdir()) / cache_name)
 
 import scipy.io as sio
 
@@ -18,13 +23,13 @@ from scampi.plotting import *
 warnings.simplefilter("ignore")
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
+HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp"
 
 run_local = True
-path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
-if os.path.exists(path) and os.path.isdir(path):
+path = str(Path(__file__).resolve().parent.parent / "datasets" / "momp") + os.sep
+if os.path.exists(HPC_DATA_PATH) and os.path.isdir(HPC_DATA_PATH):
+    path = HPC_DATA_PATH + os.sep
     run_local = False
-else:
-    path = str(Path(__file__).resolve().parent.parent / "datasets" / "momp") + os.sep
 
 filenames = {
     # key, filename, momp motif length, momp motif meaning, dataset length
@@ -404,10 +409,15 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
 
     if backend == "scampi":
         scampi_delta = force_get("scampi_delta", kwargs)
+        scampi_exact_refine = kwargs.get("scampi_exact_refine", False)
         backend_name = f"{backend} (delta={scampi_delta})"
+        if scampi_exact_refine:
+            backend_name = f"{backend_name} exact_refine"
 
         new_filename = (new_filename +
                         f"_delta_{scampi_delta}")
+        if scampi_exact_refine:
+            new_filename = new_filename + "_exact_refine"
 
     elif backend == "annoy":
         annoy_n_trees = force_get("annoy_n_trees", kwargs)

@@ -1,5 +1,6 @@
 import os
 os.environ["RUST_LOG"] = "error"
+from pathlib import Path
 
 from scampi.scampi import *
 from scampi.plotting import *
@@ -15,7 +16,8 @@ import matplotlib as mpl
 
 mpl.rcParams['figure.dpi'] = 150
 
-path = "../datasets/experiments/"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+path = str(PROJECT_ROOT / "datasets" / "experiments") + "/"
 
 
 def read_penguin_data():

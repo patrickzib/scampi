@@ -1,7 +1,10 @@
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "../../")
-sys.path.insert(0, "../")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TESTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(TESTS_DIR))
 
 import scipy.io as sio
 
@@ -34,7 +37,7 @@ def read_penguin_1m_channel0():
 
 
 def read_penguin_1m(channel=None):
-    path = "../datasets/experiments/"
+    path = str(PROJECT_ROOT / "datasets" / "experiments") + "/"
     series = pd.read_csv(path + "penguin.txt",
                          names=(["X-Acc", "Y-Acc", "Z-Acc",
                                  "4", "5", "6",
@@ -49,7 +52,7 @@ def read_penguin_1m(channel=None):
 
 
 def read_penguin_3m():
-    path = "../datasets/PeVAMmotif/"
+    path = str(PROJECT_ROOT / "datasets" / "PeVAMmotif") + "/"
     ds_name = "Penguin3M"
     test = sio.loadmat(path + 'penguinLabel.mat')
     series = test["data"].T
@@ -70,7 +73,7 @@ def run_motiflets_scale_n(
         use_1m=False,
         k_max = 10,
 ):
-    n_range = [3 * 10^6]
+    n_range = [3 * 10 ** 6]
     l_range = [32, 64, 23]
 
     for backend in backends:

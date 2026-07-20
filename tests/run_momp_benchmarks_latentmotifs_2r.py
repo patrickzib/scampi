@@ -1,11 +1,17 @@
 import os
+import tempfile
+from pathlib import Path
 
-os.environ['NUMBA_CACHE_DIR'] = '/tmp/motifs'
+if "NUMBA_CACHE_DIR" not in os.environ:
+    cache_name = f"scampi-numba-{os.getuid()}-{os.getpid()}"
+    os.environ["NUMBA_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / cache_name)
 
 import sys
 
-sys.path.insert(0, "../")
-sys.path.insert(0, "../../")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TESTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(TESTS_DIR))
 
 import time
 import psutil
@@ -18,10 +24,8 @@ from competitors.latentmotifs import LatentMotif
 from scampi.scampi import get_pairwise_extent_raw
 from scampi.distances import map_distances
 
-run_local = True
-path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
-if os.path.exists(path) and os.path.isdir(path):
-    run_local = False
+HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp"
+run_local = not (os.path.exists(HPC_DATA_PATH) and os.path.isdir(HPC_DATA_PATH))
 
 
 def run_safe(
@@ -124,11 +128,11 @@ def run_safe(
             else:
                 print(f"Skipping LatentMotif for length {length} ")
 
+    except KeyboardInterrupt:
+        raise
     except Exception as e:
-        print(f"Caught a panic: {e}")
+        print(f"Error: {e}")
         print(traceback.format_exc())
-    except BaseException as e:
-        print(f"Caught a panic: {e}")
 
 
 # 512 to 8192
