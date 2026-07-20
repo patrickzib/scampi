@@ -19,6 +19,7 @@ Sweep parameter grids by passing comma-separated values:
     python tests/run_momp_benchmarks.py \
         --methods faiss-hnsw \
         --faiss-M 32,64 \
+        --faiss-search-radius 10 \
         --faiss-efConstruction 300,500 \
         --faiss-efSearch 400,800
 
@@ -120,6 +121,7 @@ def build_runs(args):
                     "faiss_M": M,
                     "faiss_efConstruction": ef_construction,
                     "faiss_efSearch": ef_search,
+                    "faiss_search_radius": args.faiss_search_radius,
                 },
             ))
 
@@ -131,6 +133,7 @@ def build_runs(args):
                 kwargs={
                     "faiss_index": "LSH",
                     "faiss_nbits": nbits,
+                    "faiss_search_radius": args.faiss_search_radius,
                 },
             ))
 
@@ -139,6 +142,7 @@ def build_runs(args):
             kwargs = {
                 "faiss_index": "IVF",
                 "faiss_nprobe": nprobe,
+                "faiss_search_radius": args.faiss_search_radius,
             }
             if nlist is not None:
                 kwargs["faiss_nlist"] = nlist
@@ -217,6 +221,7 @@ def build_pq_runs(faiss_index, args):
             "faiss_index": faiss_index,
             "faiss_nprobe": nprobe,
             "faiss_pq_nbits": pq_nbits,
+            "faiss_search_radius": args.faiss_search_radius,
         }
         if nlist is not None:
             kwargs["faiss_nlist"] = nlist
@@ -292,7 +297,7 @@ def parse_args():
         default=None,
         help="Local-mode time series length cap. Use 'full' to disable the cap.",
     )
-    parser.add_argument("--k-max", type=int, default=3)
+    parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument("--n-jobs", type=int, default=-1)
 
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
@@ -311,6 +316,7 @@ def parse_args():
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),
                         default=[4])
+    parser.add_argument("--faiss-search-radius", type=int, default=5)
     parser.add_argument("--faiss-pq-m", type=lambda v: parse_csv(v, int),
                         default=[None])
     parser.add_argument("--faiss-pq-nbits", type=lambda v: parse_csv(v, int),
