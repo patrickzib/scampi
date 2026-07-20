@@ -463,7 +463,7 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
 
     elif backend == "faiss":
         faiss_index = force_get("faiss_index", kwargs)
-        faiss_search_radius = force_get("faiss_search_radius", kwargs)
+        search_radius = force_get("search_radius", kwargs)
 
         if faiss_index == "HNSW":
             faiss_efConstruction = force_get("faiss_efConstruction",
@@ -476,7 +476,7 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"efConstruction={faiss_efConstruction};"
                             f"efSearch={faiss_efSearch};"
                             f"M={faiss_M};"
-                            f"search_radius={faiss_search_radius})")
+                            f"search_radius={search_radius})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
@@ -484,7 +484,7 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"_efConstruction_{faiss_efConstruction}"
                             f"_efSearch_{faiss_efSearch}"
                             f"_M_{faiss_M}"
-                            f"_search_radius_{faiss_search_radius}")
+                            f"_search_radius_{search_radius}")
 
         elif faiss_index in ["IVF", "IVFPQ", "IVFPQ+HNSW"]:
             faiss_nlist = force_get("faiss_nlist", kwargs)
@@ -496,14 +496,14 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"(index={faiss_index};"
                             f"faiss_nlist={faiss_nlist};"
                             f"faiss_nprobe={faiss_nprobe};"
-                            f"search_radius={faiss_search_radius})")
+                            f"search_radius={search_radius})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
                             f"_index_{faiss_index}"
                             f"_faiss_nlist_{faiss_nlist}"
                             f"_faiss_nprobe_{faiss_nprobe}"
-                            f"_search_radius_{faiss_search_radius}")
+                            f"_search_radius_{search_radius}")
 
             if faiss_index in ["IVFPQ", "IVFPQ+HNSW"]:
                 backend_name = (
@@ -522,13 +522,13 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             backend_name = (f"{backend} "
                             f"(index={faiss_index};"
                             f"faiss_nbits={faiss_nbits};"
-                            f"search_radius={faiss_search_radius})")
+                            f"search_radius={search_radius})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
                             f"_index_{faiss_index}"
                             f"_faiss_nbits_{faiss_nbits}"
-                            f"_search_radius_{faiss_search_radius}")
+                            f"_search_radius_{search_radius}")
 
     if subsampling:
         backend_name = f"{backend_name} (subsampling={subsampling})"
