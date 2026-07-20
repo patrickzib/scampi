@@ -56,7 +56,7 @@ class VectorSearchNearestNeighbors:
         self.efConstruction = kwargs[
             "faiss_efConstruction"] if "faiss_efConstruction" in kwargs else 500
         self.efSearch = kwargs["faiss_efSearch"] if "faiss_efSearch" in kwargs else 800
-        self.efSearch = max(search_radius * self.k, self.efSearch)
+        self.efSearch = max(self.search_radius * self.k, self.efSearch)
 
         # number of clusters/cells
         self.nlist = kwargs["faiss_nlist"] if "faiss_nlist" in kwargs else None
@@ -123,9 +123,57 @@ class VectorSearchNearestNeighbors:
             np.random.shuffle(permutation)
             X_windows = X_windows[permutation]
 
+            post_process_time = None
+
             if self.index_strategy == "faiss":
-                D, index_create_time, index_search_time, knns, memory_usage \
-                    = self.process_faiss(X_windows)
+                original_search_radius = self.search_radius
+                original_ef_search = self.efSearch
+                attempts = [
+                    original_search_radius,
+                    original_search_radius * 2,
+                    original_search_radius * 4
+                ]
+                index_create_time = 0.0
+                index_search_time = 0.0
+                memory_usage = 0.0
+                post_process_time = time.time()
+
+                if self.verbose:
+                    print("    Applying exclusion zone")
+
+                try:
+                    for attempt, search_radius in enumerate(attempts):
+                        self.search_radius = search_radius
+                        self.efSearch = max(self.efSearch, self.search_radius * self.k)
+
+                        D, create_time, search_time, knns, attempt_memory \
+                            = self.process_faiss(X_windows)
+                        D, knns = restore_original_indices(D, knns, permutation)
+                        D_exact, knns_exact = apply_exclusion_zone(
+                            X,
+                            self.m,
+                            D,
+                            knns,
+                            self.k,
+                            slack=self.slack
+                        )
+                        complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+                        index_create_time += create_time
+                        index_search_time += search_time
+                        memory_usage = max(memory_usage, attempt_memory)
+
+                        if complete_rows > 0 or attempt == len(attempts) - 1:
+                            break
+
+                        if self.verbose:
+                            print(
+                                "    No complete neighbor rows found; retrying FAISS "
+                                f"with search_radius={attempts[attempt + 1]}"
+                            )
+                finally:
+                    self.search_radius = original_search_radius
+                    self.efSearch = original_ef_search
 
             elif self.index_strategy == "annoy":
                 D, index_create_time, index_search_time, knns, memory_usage \
@@ -141,28 +189,29 @@ class VectorSearchNearestNeighbors:
                     f"Available strategies: {index_strategies}"
                 )
 
-            # Post-process the results to filter out distances and neighbors
-            post_process_time = time.time()
+            if self.index_strategy != "faiss":
+                # Post-process the results to filter out distances and neighbors
+                post_process_time = time.time()
 
-            if self.verbose:
-                print(f"\tApplying exclusion Zone")
+                if self.verbose:
+                    print("    Applying exclusion zone")
 
-            D, knns = restore_original_indices(D, knns, permutation)
-            D_exact, knns_exact = apply_exclusion_zone(
-                X,
-                self.m,  # :window_size
-                D,
-                knns,
-                self.k,
-                slack=self.slack
-            )
-
-            if self.verbose:
-                print("\tFirst post-processed neighbors:", knns_exact[0])
-                print("\tLast post-processed neighbors: ", knns_exact[-1])
+                D, knns = restore_original_indices(D, knns, permutation)
+                D_exact, knns_exact = apply_exclusion_zone(
+                    X,
+                    self.m,  # :window_size
+                    D,
+                    knns,
+                    self.k,
+                    slack=self.slack
+                )
                 complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+            if self.verbose:
+                print(f"    First neighbors: {knns_exact[0]}")
+                print(f"    Last neighbors:  {knns_exact[-1]}")
                 print(
-                    f"\tRows with all post-processed neighbors: "
+                    f"    Complete neighbor rows: "
                     f"{complete_rows}/{len(knns_exact)}"
                 )
 
@@ -170,10 +219,11 @@ class VectorSearchNearestNeighbors:
             # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
 
 
-            print(f"Total time: "
-                  f"\n\tCreate: {index_create_time:.3f}s "
-                  f"\n\tSearch: {index_search_time:.3f}s "
-                  f"\n\tPost Process: {post_process_time:.3f}s.")
+            print(
+                f"    Vector search time: create={index_create_time:.3f}s "
+                f"search={index_search_time:.3f}s "
+                f"post_process={post_process_time:.3f}s"
+            )
 
             return (D_exact, knns_exact, index_create_time,
                     index_search_time, post_process_time, memory_usage)
@@ -275,9 +325,7 @@ class VectorSearchNearestNeighbors:
 
                 # number of neighbours we add to each vertex
                 if self.verbose:
-                    print(f"\tLSH")
-                    print(f"\tnBits:       {n_bits}")
-                    print(f"\tsearch_radius: {self.search_radius}")
+                    print(f"    FAISS LSH: nBits={n_bits} search_radius={self.search_radius}")
 
                 index = faiss.IndexLSH(d, n_bits)
 
@@ -286,11 +334,12 @@ class VectorSearchNearestNeighbors:
 
                 # number of neighbours we add to each vertex
                 if self.verbose:
-                    print(f"\tHNSW")
-                    print(f"\tefSearch:       {self.efSearch}")
-                    print(f"\tefConstruction: {self.efConstruction}")
-                    print(f"\tM:              {self.M}")
-                    print(f"\tsearch_radius:  {self.search_radius}")
+                    print(
+                        f"    FAISS HNSW: M={self.M} "
+                        f"efConstruction={self.efConstruction} "
+                        f"efSearch={self.efSearch} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 index = faiss.IndexHNSWFlat(d, self.M)
                 index.hnsw.efConstruction = self.efConstruction
@@ -304,10 +353,11 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVF")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
-                    print(f"\tsearch_radius: {self.search_radius}")
+                    print(
+                        f"    FAISS IVF: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 quantizer = faiss.IndexFlatL2(d)
                 index = faiss.IndexIVFFlat(quantizer, d, self.nlist, faiss.METRIC_L2)
@@ -323,15 +373,15 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVFPQ")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
-                    print(f"\tsearch_radius: {self.search_radius}")
+                    print(
+                        f"    FAISS IVFPQ: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 mm, nbits = self._faiss_pq_params(d)
                 if self.verbose:
-                    print(f"\tpq_m:   {mm}")
-                    print(f"\tpq_bits:{nbits}")
+                    print(f"    PQ: m={mm} bits={nbits}")
 
                 factory_string = f"IVF{int(self.nlist)},PQ{mm}x{nbits}"
                 index = faiss.index_factory(d, factory_string, faiss.METRIC_L2)
@@ -347,18 +397,17 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVFPQ+HNSW")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
-                    print(f"\tefSearch:       {self.efSearch}")
-                    print(f"\tefConstruction: {self.efConstruction}")
-                    print(f"\tM:      {self.M}")
-                    print(f"\tsearch_radius: {self.search_radius}")
+                    print(
+                        f"    FAISS IVFPQ+HNSW: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} M={self.M} "
+                        f"efConstruction={self.efConstruction} "
+                        f"efSearch={self.efSearch} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 mm, nbits = self._faiss_pq_params(d)
                 if self.verbose:
-                    print(f"\tpq_m:   {mm}")
-                    print(f"\tpq_bits:{nbits}")
+                    print(f"    PQ: m={mm} bits={nbits}")
 
                 # The coarse quantizer is responsible for finding the partition
                 # centroids that are nearest to the query vector so that vector search

@@ -251,7 +251,7 @@ def build_pq_runs(faiss_index, args):
 
 def selected_filenames(args, ut):
     lengths = np.array([properties[-1] for properties in ut.filenames.values()])
-    filenames = np.array(list(ut.filenames.keys()))[np.argsort(lengths)]
+    filenames = [list(ut.filenames.keys())[idx] for idx in np.argsort(lengths)]
 
     if args.datasets:
         requested = parse_csv(args.datasets)
@@ -326,7 +326,7 @@ def parse_args():
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),
                         default=[4])
-    parser.add_argument("--faiss-search-radius", type=int, default=5)
+    parser.add_argument("--faiss-search-radius", type=int, default=10)
     parser.add_argument("--faiss-pq-m", type=lambda v: parse_csv(v, int),
                         default=[None])
     parser.add_argument("--faiss-pq-nbits", type=lambda v: parse_csv(v, int),
@@ -378,13 +378,13 @@ def main():
 
     for filename in selected_filenames(args, ut):
         ds_name, _, _, _ = ut.filenames[filename]
-        print(f"Running dataset: {(filename, ds_name)}")
+        print(f"\nDataset: {filename} ({ds_name})")
         data = ut.read_mat(filename)
 
         for run in runs:
             kwargs = dict(run.kwargs)
             subsampling = kwargs.pop("subsampling", None)
-            print(f"\n\tRunning {run.label}", flush=True)
+            print(f"\n  Method: {run.label}", flush=True)
             ut.run_safe(
                 filename,
                 data,
