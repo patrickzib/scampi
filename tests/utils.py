@@ -4,7 +4,6 @@ import traceback
 import warnings
 import multiprocessing
 from pathlib import Path
-from pprint import pformat
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys_path = str(PROJECT_ROOT)
@@ -56,7 +55,7 @@ filenames = {
 }
 
 def read_mat(filename):
-    print(f"\tReading {filename} from {path + filename + '.mat'}")
+    print(f"  Reading: {path + filename + '.mat'}")
     data = sio.loadmat(path + filename + '.mat')
     # extract data array
     key = filename
@@ -69,7 +68,7 @@ def read_mat(filename):
                     and (data[k].dtype in [np.float32, np.float64])):
                 key = k
                 data = data[k]
-                print("\tFound key:", key, "with type", data.dtype)
+                print(f"  Found key: {key} dtype={data.dtype}")
                 break
 
     # flatten output
@@ -78,7 +77,7 @@ def read_mat(filename):
 
     mb = (data.size * data.itemsize) / (1024 ** 2)
 
-    print(f"\tLength: {len(data)} {mb:0.2f} MB")
+    print(f"  Series: n={len(data)} size={mb:0.2f}MB")
     # print(f"\tType: {data.dtype}")
     # print(f"\tContains NaN or Inf? {np.isnan(data).any()} {np.isinf(data).any()}")
     # print(f"\tStats Mean {np.mean(data):0.3f}, Std {np.std(data):0.3f} " +
@@ -104,7 +103,8 @@ def configure_paths(data_path=None, local_n=None):
     if local_n == "full":
         run_local = False
 
-    print(f"Using directory: {path} {run_local}")
+    mode = "local-capped" if run_local else "full"
+    print(f"Data directory: {path} ({mode})")
 
 
 def run_safe(
@@ -112,8 +112,8 @@ def run_safe(
         backend, subsampling=None, n_jobs=-1, local_n=None, **kwargs):
     try:
         if run_local:
-            print("\nWarning. Running locally.\n")
             n = 10_000 if local_n is None else int(local_n)
+            print(f"  Local cap: n={n}")
         else:
             n = len(series)
 
@@ -132,12 +132,12 @@ def run_safe(
         )
 
     except Exception as e:
-        print(f"Caught a panic: {e}")
+        print(f"Error: {e}")
         print(traceback.format_exc())
     except KeyboardInterrupt:
         raise
     except BaseException as e:
-        print(f"Caught a panic: {e}")
+        print(f"Error: {e}")
 
 
 def force_get(key, kwargs):
@@ -146,6 +146,53 @@ def force_get(key, kwargs):
     else:
         return None
         # raise ValueError(f"Parameter '{key}' not set")
+
+
+def format_motiflet_result(length, motif_length, backend_name, duration,
+                           memory_usage, extents, motiflets, elbow_points):
+    lines = [
+        (f"  Result: n={length} m={motif_length} "
+         f"backend='{backend_name}' time={duration:0.2f}s "
+         f"memory={memory_usage:0.2f}MB"),
+        f"  Elbows: {format_elbows(elbow_points)}",
+        "  Motiflets:",
+    ]
+
+    extents_array = np.asarray(extents)
+    for k in range(2, len(motiflets)):
+        motiflet = motiflets[k]
+        if motiflet is None:
+            continue
+
+        extent = format_extent(extents_array[k])
+        lines.append(f"    k={k:<2} extent={extent:<12} motiflet={format_motiflet(motiflet)}")
+
+    return "\n".join(lines)
+
+
+def format_extent(extent):
+    values = np.asarray(extent, dtype=np.float64).reshape(-1)
+    if len(values) == 1:
+        return f"{values[0]:0.6g}"
+    return "[" + ", ".join(f"{value:0.6g}" for value in values) + "]"
+
+
+def format_motiflet(motiflet):
+    arr = np.asarray(motiflet)
+    if arr.size == 0:
+        return "[]"
+    if arr.ndim == 1:
+        return "[" + ", ".join(str(int(value)) for value in arr) + "]"
+    rows = []
+    for row in arr:
+        rows.append("[" + ", ".join(str(int(value)) for value in row) + "]")
+    return "[" + ", ".join(rows) + "]"
+
+
+def format_elbows(elbow_points):
+    if isinstance(elbow_points, list):
+        return "[" + ", ".join(format_motiflet(elbow) for elbow in elbow_points) + "]"
+    return format_motiflet(elbow_points)
 
 
 def find_dominant_window_sizes(X, offset=0.05):
@@ -222,7 +269,7 @@ def test_motiflets_scale_n(
         gc.collect()
 
         # print(f"\n\tUsing {backend} size of ts {n} and l_ranges {l_range}")
-        print(f"\tNumber of cores {n_jobs}")
+        print(f"  Workers: {n_jobs}")
 
         ds_name, ts = read_data()
         if isinstance(ts, pd.DataFrame):
@@ -247,16 +294,15 @@ def test_motiflets_scale_n(
             start = time.time()
             duration = start
 
-            print(f"Running: {ds_name}, motif length: {l}, n: {n}")
+            print(f"  Run: dataset={ds_name} m={l} n={n}")
             l_new = l
 
             if subsampling:
                 l_new = int(np.round(l / subsampling))
-                print(f"\tApplying Subsampling {subsampling}, "
-                      f"Old Size {ts_orig.shape} " +
-                      f"New Size {ts.shape}, " +
-                      f"Old Window {l} " +
-                      f"New Window {l_new}")
+                print(
+                    f"  Subsampling: factor={subsampling} "
+                    f"size={ts_orig.shape}->{ts.shape} m={l}->{l_new}"
+                )
 
             try:
                 mm = SCAMPI(
@@ -276,7 +322,7 @@ def test_motiflets_scale_n(
                 motiflets = motiflets
 
                 if subsampling:
-                    print(f"\tRecomputing Extend using Window Size {l}")
+                    print(f"  Recomputing extent with original m={l}")
                     for i, motiflet in enumerate(motiflets):
                         if motiflet:
                             motiflet = np.array(motiflet) * subsampling  # scale up again
@@ -323,11 +369,17 @@ def test_motiflets_scale_n(
                 df_single.loc[len(df_single.index)] = current_single
                 df_single.to_csv(new_filename + ".csv", index=False)
 
-                print(f"\tDiscovered scampi in {duration:0.2f} seconds")
-                print("\t'length', 'motif length', 'backend', 'time in s', "
-                      "'memory in MB', 'extent', 'motiflet', 'elbows'")
-                # print("\t" + str(current[0]), *current[1:], sep=', ')
-                print("\t" + pformat(current, width=120, compact=True))
+                print(f"  Completed in {duration:0.2f}s")
+                print(format_motiflet_result(
+                    ts_orig.shape[-1],
+                    l,
+                    backend_name,
+                    duration,
+                    memory_usage,
+                    extents,
+                    motiflets,
+                    elbow_points,
+                ))
 
                 del mm  # free up memory
             except Exception as e:
