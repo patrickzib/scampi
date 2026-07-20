@@ -7,6 +7,10 @@ import numpy as np
 #from numba import njit, prange
 
 
+class PyAttimoError(ImportError):
+    """Raised when the pyattimo SCAMPI backend cannot be loaded."""
+
+
 class SCAMPINearestNeighbors:
     """
     SCAMPI-based nearest neighbor computations for motiflet discovery.
@@ -59,7 +63,7 @@ class SCAMPINearestNeighbors:
         try:
             import pyattimo
         except ImportError as e:
-            raise PyAttimoError(f"Failed to import SCAMPI: {str(e)}")
+            raise PyAttimoError(f"Failed to import SCAMPI: {str(e)}") from e
 
         n = X.shape[-1] - self.m + 1
 

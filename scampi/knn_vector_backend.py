@@ -66,6 +66,8 @@ class VectorSearchNearestNeighbors:
 
         # number of bits used for hashing (resolution)
         self.nBits = kwargs["faiss_nbits"] if "faiss_nbits" in kwargs else 4
+        self.pq_m = kwargs["faiss_pq_m"] if "faiss_pq_m" in kwargs else None
+        self.pq_nbits = kwargs["faiss_pq_nbits"] if "faiss_pq_nbits" in kwargs else 8
 
         #### annoy
 
@@ -252,6 +254,7 @@ class VectorSearchNearestNeighbors:
 
         import faiss
         faiss.omp_set_num_threads(self.n_jobs)
+        X_windows = np.ascontiguousarray(X_windows, dtype=np.float32)
 
         # Compute distances using the lower bounding representation
         index_create_time = time.time()
@@ -314,8 +317,10 @@ class VectorSearchNearestNeighbors:
                     print(f"\tnlist:  {self.nlist}")
                     print(f"\tnprobe: {self.nprobe}")
 
-                mm = 64  # d // 32  # Use 1/32 dimension for PQ
-                nbits = 8  # bits per Subvector
+                mm, nbits = self._faiss_pq_params(d)
+                if self.verbose:
+                    print(f"\tpq_m:   {mm}")
+                    print(f"\tpq_bits:{nbits}")
 
                 factory_string = f"IVF{int(self.nlist)},PQ{mm}x{nbits}"
                 index = faiss.index_factory(d, factory_string, faiss.METRIC_L2)
@@ -338,8 +343,10 @@ class VectorSearchNearestNeighbors:
                     print(f"\tefConstruction: {self.efConstruction}")
                     print(f"\tM:      {self.M}")
 
-                mm = 64  # d // 32  # Use 1/32 dimension for PQ
-                nbits = 8  # bits per Subvector
+                mm, nbits = self._faiss_pq_params(d)
+                if self.verbose:
+                    print(f"\tpq_m:   {mm}")
+                    print(f"\tpq_bits:{nbits}")
 
                 # The coarse quantizer is responsible for finding the partition
                 # centroids that are nearest to the query vector so that vector search
@@ -384,6 +391,21 @@ class VectorSearchNearestNeighbors:
         del index
 
         return D, index_create_time, index_search_time, knns, memory_usage
+
+    def _faiss_pq_params(self, d):
+        nbits = int(self.pq_nbits)
+        if self.pq_m is not None:
+            mm = int(self.pq_m)
+            if d % mm != 0:
+                raise ValueError(
+                    f"faiss_pq_m={mm} must divide vector dimension {d}."
+                )
+            return mm, nbits
+
+        mm = min(64, d)
+        while d % mm != 0:
+            mm -= 1
+        return mm, nbits
 
 
 @njit(fastmath=True, cache=True)
