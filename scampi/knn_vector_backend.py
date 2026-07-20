@@ -97,77 +97,80 @@ class VectorSearchNearestNeighbors:
 
     def compute_knns(self, X):
         """Computes approximate distances and k-nearest neighbors."""
-        assert X.shape[0] == 1, \
-            "Vector backends can handle univariate data, only."
+        if X.shape[0] != 1:
+            raise ValueError("Vector backends can handle univariate data, only.")
 
         # Set the number of threads for Numba
         self.previous_jobs = get_num_threads()
         set_num_threads(self.n_jobs)
 
-        pid = os.getpid()
-        self.process = psutil.Process(pid)
+        try:
+            pid = os.getpid()
+            self.process = psutil.Process(pid)
 
-        if X.ndim > 1:
-            X = X.flatten()
+            if X.ndim > 1:
+                X = X.flatten()
 
-        X_windows = znorm_windows(X, self.m)
+            X_windows = znorm_windows(X, self.m)
 
-        # We must shuffle
-        np.random.seed(42)
-        np.random.shuffle(X_windows)
+            # We must shuffle
+            np.random.seed(42)
+            permutation = np.arange(len(X_windows), dtype=np.int32)
+            np.random.shuffle(permutation)
+            X_windows = X_windows[permutation]
 
-        if self.index_strategy == "faiss":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_faiss(X_windows)
+            if self.index_strategy == "faiss":
+                D, index_create_time, index_search_time, knns, memory_usage \
+                    = self.process_faiss(X_windows)
 
-        elif self.index_strategy == "annoy":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_annoy(X_windows)
+            elif self.index_strategy == "annoy":
+                D, index_create_time, index_search_time, knns, memory_usage \
+                    = self.process_annoy(X_windows)
 
-        elif self.index_strategy == "pynndescent":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_pynndescent(X_windows)
+            elif self.index_strategy == "pynndescent":
+                D, index_create_time, index_search_time, knns, memory_usage \
+                    = self.process_pynndescent(X_windows)
 
-        else:
-            raise ValueError(
-                f"Unknown indexing strategy: {index_strategy}. "
-                f"Available strategies: {index_strategies}"
+            else:
+                raise ValueError(
+                    f"Unknown indexing strategy: {self.index_strategy}. "
+                    f"Available strategies: {index_strategies}"
+                )
+
+            # Post-process the results to filter out distances and neighbors
+            post_process_time = time.time()
+
+            if self.verbose:
+                print(f"\tApplying exclusion Zone")
+
+            D, knns = restore_original_indices(D, knns, permutation)
+            D_exact, knns_exact = apply_exclusion_zone(
+                X,
+                self.m,  # :window_size
+                D,
+                knns,
+                self.k,
+                slack=self.slack
             )
 
-        # Post-process the results to filter out distances and neighbors
-        post_process_time = time.time()
+            if self.verbose:
+                print("\t", knns_exact[0])
+                print("\t", knns_exact[-1])
 
-        if self.verbose:
-            print(f"\tApplying exclusion Zone")
-            #print("\t", knns[0])
-            #print("\t", knns[-1])
+            post_process_time = time.time() - post_process_time
+            # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
 
-        D_exact, knns_exact = apply_exclusion_zone(
-            X,
-            self.m,  # :window_size
-            D,
-            knns,
-            self.k,
-            slack=self.slack
-        )
 
-        if self.verbose:
-            print("\t", knns_exact[0])
-            print("\t", knns_exact[-1])
+            print(f"Total time: "
+                  f"\n\tCreate: {index_create_time:.3f}s "
+                  f"\n\tSearch: {index_search_time:.3f}s "
+                  f"\n\tPost Process: {post_process_time:.3f}s.")
 
-        post_process_time = time.time() - post_process_time
-        # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
+            return (D_exact, knns_exact, index_create_time,
+                    index_search_time, post_process_time, memory_usage)
 
-        # Set old values
-        set_num_threads(self.previous_jobs)
-
-        print(f"Total time: "
-              f"\n\tCreate: {index_create_time:.3f}s "
-              f"\n\tSearch: {index_search_time:.3f}s "
-              f"\n\tPost Process: {post_process_time:.3f}s.")
-
-        return (D_exact, knns_exact, index_create_time,
-                index_search_time, post_process_time, memory_usage)
+        finally:
+            set_num_threads(self.previous_jobs)
 
     def process_annoy(self, X_windows):
         import annoy
@@ -189,13 +192,12 @@ class VectorSearchNearestNeighbors:
         index_create_time = time.time() - index_create_time
 
         index_search_time = time.time()
-        # FIXME: no method to query multiple samples at the same time
-        #        thus, too slow
+        # no method to query multiple samples at the same time
         knns = np.zeros((len(X_windows), self.k), dtype=np.int32)
         D = np.zeros((len(X_windows), self.k), dtype=np.float32)
         for i, X in enumerate(X_windows):
             knns[i], D[i] = index.get_nns_by_vector(
-                X_windows, self.k, self.annoy_search_k, include_distances=True)
+                X, self.k, self.annoy_search_k, include_distances=True)
 
         index_search_time = time.time() - index_search_time
 
@@ -342,11 +344,11 @@ class VectorSearchNearestNeighbors:
                 # The coarse quantizer is responsible for finding the partition
                 # centroids that are nearest to the query vector so that vector search
                 # only needs to be performed on those partitions.
-                quantizer = faiss.IndexHNSWFlat(D, self.M)
+                quantizer = faiss.IndexHNSWFlat(d, self.M)
                 quantizer.hnsw.efConstruction = self.efConstruction
                 quantizer.hnsw.efSearch = self.efSearch
 
-                index = faiss.IndexIVFPQ(quantizer, D, self.nlist, mm, nbits,
+                index = faiss.IndexIVFPQ(quantizer, d, self.nlist, mm, nbits,
                                          faiss.METRIC_L2)
 
                 index.train(X_windows)
@@ -354,7 +356,7 @@ class VectorSearchNearestNeighbors:
 
             else:
                 raise ValueError(
-                    'Unknown FAISS index' + faiss_index + '.' +
+                    'Unknown FAISS index' + self.faiss_index + '.' +
                     'Use "HNSW", "IVF", "IVFPQ", "LSH".')
         else:
             raise ValueError(
@@ -402,6 +404,23 @@ def znorm_windows(X, window_size):
     X_lb = (X_windows - mean[:, np.newaxis]) / std[:, np.newaxis]
 
     return X_lb
+
+
+@njit(cache=True)
+def restore_original_indices(D_shuffled, knns_shuffled, permutation):
+    D = np.empty_like(D_shuffled)
+    knns = np.full(knns_shuffled.shape, -1, dtype=knns_shuffled.dtype)
+
+    for shuffled_row in range(len(permutation)):
+        original_row = permutation[shuffled_row]
+        D[original_row] = D_shuffled[shuffled_row]
+
+        for i in range(knns_shuffled.shape[1]):
+            shuffled_neighbor = knns_shuffled[shuffled_row, i]
+            if shuffled_neighbor >= 0:
+                knns[original_row, i] = permutation[shuffled_neighbor]
+
+    return D, knns
 
 
 # FIXME: adding fastmath=True breaks the code???
@@ -458,7 +477,7 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
     for i in prange(len(knns)):
         query = X[i:i + m]
         knn = knns[i]
-        for a in prange(1, len(knn)):
+        for a in range(len(knn)):
             j = knn[a]
             if j > -1:
                 # Re-rank based on z-normalized Euclidean distance
