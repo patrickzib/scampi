@@ -158,11 +158,13 @@ class VectorSearchNearestNeighbors:
             )
 
             if self.verbose:
-                missing = np.sum(knns_exact < 0)
                 print("\tFirst post-processed neighbors:", knns_exact[0])
                 print("\tLast post-processed neighbors: ", knns_exact[-1])
-                if missing > 0:
-                    print(f"\tMissing post-processed neighbors: {missing}")
+                complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+                print(
+                    f"\tRows with all post-processed neighbors: "
+                    f"{complete_rows}/{len(knns_exact)}"
+                )
 
             post_process_time = time.time() - post_process_time
             # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
@@ -275,6 +277,7 @@ class VectorSearchNearestNeighbors:
                 if self.verbose:
                     print(f"\tLSH")
                     print(f"\tnBits:       {n_bits}")
+                    print(f"\tsearch_radius: {self.search_radius}")
 
                 index = faiss.IndexLSH(d, n_bits)
 
@@ -287,6 +290,7 @@ class VectorSearchNearestNeighbors:
                     print(f"\tefSearch:       {self.efSearch}")
                     print(f"\tefConstruction: {self.efConstruction}")
                     print(f"\tM:              {self.M}")
+                    print(f"\tsearch_radius:  {self.search_radius}")
 
                 index = faiss.IndexHNSWFlat(d, self.M)
                 index.hnsw.efConstruction = self.efConstruction
@@ -303,6 +307,7 @@ class VectorSearchNearestNeighbors:
                     print(f"\tIVF")
                     print(f"\tnlist:  {self.nlist}")
                     print(f"\tnprobe: {self.nprobe}")
+                    print(f"\tsearch_radius: {self.search_radius}")
 
                 quantizer = faiss.IndexFlatL2(d)
                 index = faiss.IndexIVFFlat(quantizer, d, self.nlist, faiss.METRIC_L2)
@@ -321,6 +326,7 @@ class VectorSearchNearestNeighbors:
                     print(f"\tIVFPQ")
                     print(f"\tnlist:  {self.nlist}")
                     print(f"\tnprobe: {self.nprobe}")
+                    print(f"\tsearch_radius: {self.search_radius}")
 
                 mm, nbits = self._faiss_pq_params(d)
                 if self.verbose:
@@ -347,6 +353,7 @@ class VectorSearchNearestNeighbors:
                     print(f"\tefSearch:       {self.efSearch}")
                     print(f"\tefConstruction: {self.efConstruction}")
                     print(f"\tM:      {self.M}")
+                    print(f"\tsearch_radius: {self.search_radius}")
 
                 mm, nbits = self._faiss_pq_params(d)
                 if self.verbose:
