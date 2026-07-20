@@ -113,7 +113,9 @@ def build_runs(args):
             runs.append(BenchmarkRun(
                 label=(
                     f"faiss HNSW M={M} "
-                    f"efConstruction={ef_construction} efSearch={ef_search}"
+                    f"efConstruction={ef_construction} "
+                    f"efSearch={ef_search} "
+                    f"search_radius={args.faiss_search_radius}"
                 ),
                 backend="faiss",
                 kwargs={
@@ -128,7 +130,10 @@ def build_runs(args):
     if "faiss-lsh" in methods:
         for nbits in args.faiss_nbits:
             runs.append(BenchmarkRun(
-                label=f"faiss LSH nbits={nbits}",
+                label=(
+                    f"faiss LSH nbits={nbits} "
+                    f"search_radius={args.faiss_search_radius}"
+                ),
                 backend="faiss",
                 kwargs={
                     "faiss_index": "LSH",
@@ -147,7 +152,11 @@ def build_runs(args):
             if nlist is not None:
                 kwargs["faiss_nlist"] = nlist
             runs.append(BenchmarkRun(
-                label=f"faiss IVF nlist={nlist or 'sqrt(n)'} nprobe={nprobe}",
+                label=(
+                    f"faiss IVF nlist={nlist or 'sqrt(n)'} "
+                    f"nprobe={nprobe} "
+                    f"search_radius={args.faiss_search_radius}"
+                ),
                 backend="faiss",
                 kwargs=kwargs,
             ))
@@ -231,7 +240,8 @@ def build_pq_runs(faiss_index, args):
         runs.append(BenchmarkRun(
             label=(
                 f"faiss {faiss_index} nlist={nlist or 'sqrt(n)'} "
-                f"nprobe={nprobe} pq_m={pq_m or 'auto'} pq_bits={pq_nbits}"
+                f"nprobe={nprobe} pq_m={pq_m or 'auto'} "
+                f"pq_bits={pq_nbits} search_radius={args.faiss_search_radius}"
             ),
             backend="faiss",
             kwargs=kwargs,
