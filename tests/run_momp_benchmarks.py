@@ -19,7 +19,7 @@ Sweep parameter grids by passing comma-separated values:
     python tests/run_momp_benchmarks.py \
         --methods faiss-hnsw \
         --faiss-M 32,64 \
-        --faiss-search-radius 10 \
+        --search-radius 10 \
         --faiss-efConstruction 300,500 \
         --faiss-efSearch 400,800
 
@@ -131,7 +131,7 @@ def build_runs(args):
                     f"faiss HNSW M={M} "
                     f"efConstruction={ef_construction} "
                     f"efSearch={ef_search} "
-                    f"search_radius={args.faiss_search_radius}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs={
@@ -139,7 +139,7 @@ def build_runs(args):
                     "faiss_M": M,
                     "faiss_efConstruction": ef_construction,
                     "faiss_efSearch": ef_search,
-                    "faiss_search_radius": args.faiss_search_radius,
+                    "search_radius": args.search_radius,
                 },
             ))
 
@@ -148,13 +148,13 @@ def build_runs(args):
             runs.append(BenchmarkRun(
                 label=(
                     f"faiss LSH nbits={nbits} "
-                    f"search_radius={args.faiss_search_radius}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs={
                     "faiss_index": "LSH",
                     "faiss_nbits": nbits,
-                    "faiss_search_radius": args.faiss_search_radius,
+                    "search_radius": args.search_radius,
                 },
             ))
 
@@ -163,7 +163,7 @@ def build_runs(args):
             kwargs = {
                 "faiss_index": "IVF",
                 "faiss_nprobe": nprobe,
-                "faiss_search_radius": args.faiss_search_radius,
+                "search_radius": args.search_radius,
             }
             if nlist is not None:
                 kwargs["faiss_nlist"] = nlist
@@ -171,7 +171,7 @@ def build_runs(args):
                 label=(
                     f"faiss IVF nlist={nlist or 'sqrt(n)'} "
                     f"nprobe={nprobe} "
-                    f"search_radius={args.faiss_search_radius}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs=kwargs,
@@ -246,7 +246,7 @@ def build_pq_runs(faiss_index, args):
             "faiss_index": faiss_index,
             "faiss_nprobe": nprobe,
             "faiss_pq_nbits": pq_nbits,
-            "faiss_search_radius": args.faiss_search_radius,
+            "search_radius": args.search_radius,
         }
         if nlist is not None:
             kwargs["faiss_nlist"] = nlist
@@ -257,7 +257,7 @@ def build_pq_runs(faiss_index, args):
             label=(
                 f"faiss {faiss_index} nlist={nlist or 'sqrt(n)'} "
                 f"nprobe={nprobe} pq_m={pq_m or 'auto'} "
-                f"pq_bits={pq_nbits} search_radius={args.faiss_search_radius}"
+                f"pq_bits={pq_nbits} search_radius={args.search_radius}"
             ),
             backend="faiss",
             kwargs=kwargs,
@@ -347,7 +347,16 @@ def parse_args():
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),
                         default=[4])
-    parser.add_argument("--faiss-search-radius", type=int, default=10)
+    parser.add_argument(
+        "--search-radius",
+        type=int,
+        default=10,
+        help=(
+            "Candidate shortlist multiplier for approximate vector methods. "
+            "The backend requests search_radius * k raw neighbors before "
+            "exclusion-zone post-processing."
+        ),
+    )
     parser.add_argument("--faiss-pq-m", type=parse_optional_int_csv,
                         default=[None])
     parser.add_argument("--faiss-pq-nbits", type=lambda v: parse_csv(v, int),

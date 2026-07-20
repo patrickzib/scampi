@@ -8,21 +8,37 @@ class PyAttimoError(ImportError):
 
 
 class SCAMPINearestNeighbors:
-    """
-    SCAMPI-based nearest neighbor computations for motiflet discovery.
+    """SCAMPI/pyattimo-based motiflet backend.
 
-    Parameters:
-    -----------
-    motif_length : int
-        Length of motifs to discover (must be positive)
+    Parameters
+    ----------
+    m : int
+        Motif length.
     k_max : int
-        Maximum number of scampi to discover (must be positive)
+        Maximum motiflet support index to request from pyattimo. The backend
+        asks pyattimo for ``support=k_max - 1`` and stores returned motiflets by
+        ``mot.support``.
+    top_k : int, default=1
+        Number of motiflet candidates to keep per support.
     slack : float, default=0.5
-        Exclusion zone factor for motif discovery (0.0 to 1.0)
-    verbose : bool, default=True
-        Whether to print computation progress
+        Exclusion-zone factor. The exclusion zone passed to pyattimo is
+        ``int(m * slack)``.
+    verbose : bool, default=False
+        Whether to print pyattimo progress and exact-refinement diagnostics.
+    **kwargs
+        scampi_delta : float or None, default=0.1
+            Approximation delta passed to pyattimo. If truthy, pyattimo is run
+            with ``stop_on_threshold=True`` and ``fraction_threshold=log(n)/n``.
+        scampi_max_memory : str, default="2 GB"
+            Maximum memory string passed to pyattimo.
+        scampi_exact_refine : bool, default=False
+            If true, each pyattimo motiflet candidate is treated as a set of
+            seed positions. For each seed, the backend recomputes exact
+            z-normalized k-nearest neighbors and replaces the pyattimo candidate
+            only when the exact pairwise extent is smaller. This is more
+            expensive because it performs full sliding-dot-product searches for
+            the seed positions.
     """
-
     def __init__(
             self,
             m,
@@ -38,22 +54,27 @@ class SCAMPINearestNeighbors:
         self.top_k = top_k
         self.verbose = verbose
 
-        self.scampi_delta = 0.1  # default value
-        if "scampi_delta" in kwargs:
-            self.scampi_delta = kwargs["scampi_delta"]
+        self.scampi_delta = kwargs.get("scampi_delta", 0.1)
+        self.scampi_max_memory = kwargs.get("scampi_max_memory", "2 GB")
+        self.scampi_exact_refine = kwargs.get("scampi_exact_refine", False)
 
-        if "scampi_max_memory" in kwargs:
-            self.scampi_max_memory = kwargs["scampi_max_memory"]
-        else:
-            self.scampi_max_memory = "2 GB"
+        consumed_kwargs = {
+            "scampi_delta",
+            "scampi_max_memory",
+            "scampi_exact_refine",
+        }
+        unused_kwargs = {
+            key: value for key, value in kwargs.items()
+            if key not in consumed_kwargs
+        }
 
-        self.scampi_exact_refine = False
-        if "scampi_exact_refine" in kwargs:
-            self.scampi_exact_refine = kwargs["scampi_exact_refine"]
-
-        print(f"Setting SCAMPI delta to {self.scampi_delta}")
-        print(f"Setting SCAMPI max memory to {self.scampi_max_memory}")
-        print(f"Setting SCAMPI exact refine to {self.scampi_exact_refine}")
+        print(
+            "SCAMPI kwargs: "
+            f"delta={self.scampi_delta}, "
+            f"max_memory={self.scampi_max_memory}, "
+            f"exact_refine={self.scampi_exact_refine}, "
+            f"unused={unused_kwargs}"
+        )
 
     def compute_knns(self, X):
         """Compute k-nearest neighbors using SCAMPI motiflet discovery."""
@@ -180,7 +201,13 @@ class SCAMPINearestNeighbors:
 
 
 def compute_knn(ts, motiflet_seeds, m, k, slack=0.5):
-    """Refine pyattimo seed positions into an exact k-neighbor motiflet."""
+    """Refine pyattimo seed positions into an exact k-neighbor motiflet.
+
+    Each seed position is used as a query subsequence. The function computes its
+    exact non-overlapping k nearest neighbors under z-normalized Euclidean
+    distance, evaluates the exact pairwise extent of that k-motiflet, and
+    returns the candidate with the smallest extent.
+    """
     from scampi.distances import (
         sliding_mean_std,
         znormed_euclidean_distance,
@@ -220,7 +247,10 @@ def compute_knn(ts, motiflet_seeds, m, k, slack=0.5):
 def get_pairwise_extent_raw_1d(
         series, motifset_pos, motif_length,
         distance_single, preprocessing):
-    """Compute the exact pairwise extent for one univariate motif set."""
+    """Compute the exact pairwise extent for one univariate motif set.
+
+    Returns ``np.inf`` when the motif set contains invalid ``-1`` positions.
+    """
     if -1 in motifset_pos:
         return np.inf
 
