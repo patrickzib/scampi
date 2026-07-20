@@ -43,7 +43,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import numpy as np
 
 
-HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
+HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp"
 RUN_LOCAL = not (os.path.exists(HPC_DATA_PATH) and os.path.isdir(HPC_DATA_PATH))
 
 DEFAULT_METHODS = ["faiss-hnsw"]
