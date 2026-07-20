@@ -1,7 +1,9 @@
 import gc
+import os
 import traceback
 import warnings
 import multiprocessing
+from pathlib import Path
 from pprint import pformat
 
 import scipy.io as sio
@@ -11,12 +13,14 @@ from scampi.plotting import *
 
 warnings.simplefilter("ignore")
 
+RESULTS_DIR = Path(__file__).resolve().parent / "results"
+
 run_local = True
 path = "/vol/fob-wbib-vol2/wbi/schaefpa/scampi/momp/"
 if os.path.exists(path) and os.path.isdir(path):
     run_local = False
 else:
-    path = "../datasets/momp/"
+    path = str(Path(__file__).resolve().parent.parent / "datasets" / "momp") + os.sep
 
 print(f"Using directory: {path} {run_local}")
 
@@ -269,6 +273,7 @@ def test_motiflets_scale_n(
 
                 backend_name, new_filename = (
                     infer_filename(backend, ds_name, k_max, kwargs, subsampling))
+                os.makedirs(os.path.dirname(new_filename), exist_ok=True)
 
                 duration = time.time() - start
                 memory_usage = mm.memory_usage
@@ -284,13 +289,18 @@ def test_motiflets_scale_n(
                 df.loc[len(df.index)] = current
                 df.to_json(new_filename + ".json")
 
+                single_extent = float(np.asarray(extents[-1]).reshape(-1)[0])
+                single_motiflet = motiflets[-1]
+                if np.asarray(single_motiflet).ndim > 1:
+                    single_motiflet = single_motiflet[0]
+
                 current_single = [ts_orig.shape[-1],
                            l,
                            backend_name,
                            duration,
                            memory_usage,
-                           float(extents[-1]),
-                           motiflets[-1],
+                           single_extent,
+                           single_motiflet,
                            elbow_points]
                 df_single.loc[len(df_single.index)] = current_single
                 df_single.to_csv(new_filename + ".csv", index=False)
@@ -318,7 +328,7 @@ def test_motiflets_scale_n(
 
 def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
     backend_name = backend
-    new_filename = f"results/scalability_n_{ds_name}_{k_max}_{backend}"
+    new_filename = str(RESULTS_DIR / f"scalability_n_{ds_name}_{k_max}_{backend}")
 
     if backend == "scampi":
         scampi_delta = force_get("scampi_delta", kwargs)
@@ -391,17 +401,32 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"_efSearch_{faiss_efSearch}"
                             f"_M_{faiss_M}")
 
-        elif faiss_index in ["IVF", "IVFPQ"]:
+        elif faiss_index in ["IVF", "IVFPQ", "IVFPQ+HNSW"]:
+            faiss_nlist = force_get("faiss_nlist", kwargs)
             faiss_nprobe = force_get("faiss_nprobe", kwargs)
+            faiss_pq_m = force_get("faiss_pq_m", kwargs)
+            faiss_pq_nbits = force_get("faiss_pq_nbits", kwargs)
 
             backend_name = (f"{backend} "
                             f"(index={faiss_index};"
+                            f"faiss_nlist={faiss_nlist};"
                             f"faiss_nprobe={faiss_nprobe})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
                             f"_index_{faiss_index}"
+                            f"_faiss_nlist_{faiss_nlist}"
                             f"_faiss_nprobe_{faiss_nprobe}")
+
+            if faiss_index in ["IVFPQ", "IVFPQ+HNSW"]:
+                backend_name = (
+                    backend_name[:-1] +
+                    f";faiss_pq_m={faiss_pq_m};"
+                    f"faiss_pq_nbits={faiss_pq_nbits})")
+                new_filename = (
+                    new_filename +
+                    f"_faiss_pq_m_{faiss_pq_m}"
+                    f"_faiss_pq_nbits_{faiss_pq_nbits}")
 
 
         elif faiss_index in ["LSH"]:
