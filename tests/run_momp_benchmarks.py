@@ -351,7 +351,10 @@ def main():
         return
 
     import utils as ut
-    ut.configure_paths(data_path=args.data_path, local_n=args.local_n)
+    local_n = args.local_n
+    if local_n is None and not RUN_LOCAL:
+        local_n = "full"
+    ut.configure_paths(data_path=args.data_path, local_n=local_n)
 
     runs = build_runs(args)
     print(f"Selected methods: {[run.label for run in runs]}")
@@ -374,7 +377,7 @@ def main():
                 run.backend,
                 subsampling=subsampling,
                 n_jobs=args.n_jobs,
-                local_n=args.local_n,
+                local_n=local_n,
                 **kwargs,
             )
 

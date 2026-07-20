@@ -27,8 +27,6 @@ if os.path.exists(path) and os.path.isdir(path):
 else:
     path = str(Path(__file__).resolve().parent.parent / "datasets" / "momp") + os.sep
 
-print(f"Using directory: {path} {run_local}")
-
 filenames = {
     # key, filename, momp motif length, momp motif meaning, dataset length
     "EOG_one_hour_50_Hz": ["EOG_one_hour_50_Hz", 1024, "?", 180000],
@@ -136,6 +134,8 @@ def run_safe(
     except Exception as e:
         print(f"Caught a panic: {e}")
         print(traceback.format_exc())
+    except KeyboardInterrupt:
+        raise
     except BaseException as e:
         print(f"Caught a panic: {e}")
 
@@ -332,6 +332,8 @@ def test_motiflets_scale_n(
                 del mm  # free up memory
             except Exception as e:
                 print(traceback.format_exc())
+            except KeyboardInterrupt:
+                raise
             except BaseException as e:
                 print(f"Caught a panic: {e}")
 
