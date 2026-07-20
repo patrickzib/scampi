@@ -96,13 +96,26 @@ def read_mat(filename):
     return data.astype(np.float64)
 
 
+def configure_paths(data_path=None, local_n=None):
+    global path, run_local
+
+    if data_path is not None:
+        path = str(Path(data_path).expanduser().resolve()) + os.sep
+        run_local = False
+
+    if local_n == "full":
+        run_local = False
+
+    print(f"Using directory: {path} {run_local}")
+
+
 def run_safe(
         ds_name, series, l_range, k_max,
-        backend, subsampling=None, n_jobs=-1, **kwargs):
+        backend, subsampling=None, n_jobs=-1, local_n=None, **kwargs):
     try:
         if run_local:
             print("\nWarning. Running locally.\n")
-            n = 10_000
+            n = 10_000 if local_n is None else int(local_n)
         else:
             n = len(series)
 
