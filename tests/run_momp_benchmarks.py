@@ -22,10 +22,15 @@ Sweep parameter grids by passing comma-separated values:
         --faiss-efConstruction 300,500 \
         --faiss-efSearch 400,800
 
+Run against a specific server data directory:
+    python tests/run_momp_benchmarks.py \
+        --data-path /vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp \
+        --methods faiss-hnsw
+
 Available method presets are listed in AVAILABLE_METHODS below. Each selected
 method expands to one or more BenchmarkRun entries from the relevant parameter
 grid. Results are written to tests/results, and local runs use a 10,000 point
-slice per dataset to keep smoke checks manageable.
+slice per dataset to keep smoke checks manageable unless --local-n full is set.
 """
 
 import argparse
@@ -278,6 +283,15 @@ def parse_args():
         default=default_lengths(),
         help="Comma-separated motif lengths. Defaults to 512 locally, 512..4096 on HPC.",
     )
+    parser.add_argument(
+        "--data-path",
+        help="Directory containing MOMP .mat files. Forces full-data mode.",
+    )
+    parser.add_argument(
+        "--local-n",
+        default=None,
+        help="Local-mode time series length cap. Use 'full' to disable the cap.",
+    )
     parser.add_argument("--k-max", type=int, default=3)
     parser.add_argument("--n-jobs", type=int, default=-1)
 
@@ -337,6 +351,7 @@ def main():
         return
 
     import utils as ut
+    ut.configure_paths(data_path=args.data_path, local_n=args.local_n)
 
     runs = build_runs(args)
     print(f"Selected methods: {[run.label for run in runs]}")
@@ -359,6 +374,7 @@ def main():
                 run.backend,
                 subsampling=subsampling,
                 n_jobs=args.n_jobs,
+                local_n=args.local_n,
                 **kwargs,
             )
 
