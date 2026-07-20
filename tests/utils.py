@@ -6,6 +6,11 @@ import multiprocessing
 from pathlib import Path
 from pprint import pformat
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys_path = str(PROJECT_ROOT)
+if sys_path not in os.sys.path:
+    os.sys.path.insert(0, sys_path)
+
 import scipy.io as sio
 
 from scampi.scampi import *

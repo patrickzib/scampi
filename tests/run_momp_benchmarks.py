@@ -33,11 +33,12 @@ import itertools
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 os.environ["NUMBA_CACHE_DIR"] = "/tmp/motifs"
 
-sys.path.insert(0, "../")
-sys.path.insert(0, "../../")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 
