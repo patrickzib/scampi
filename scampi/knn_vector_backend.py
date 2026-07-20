@@ -38,7 +38,9 @@ class VectorSearchNearestNeighbors:
         self.m = m
         self.k = k
         self.index_strategy = index_strategy
-        self.search_radius = search_radius
+        self.search_radius = kwargs["search_radius"] if "search_radius" in kwargs else search_radius
+        self.search_radius = kwargs[
+            "faiss_search_radius"] if "faiss_search_radius" in kwargs else self.search_radius
         self.slack = slack
         self.n_jobs = n_jobs
         self.n_jobs = os.cpu_count() if self.n_jobs < 1 else self.n_jobs
@@ -156,8 +158,11 @@ class VectorSearchNearestNeighbors:
             )
 
             if self.verbose:
-                print("\t", knns_exact[0])
-                print("\t", knns_exact[-1])
+                missing = np.sum(knns_exact < 0)
+                print("\tFirst post-processed neighbors:", knns_exact[0])
+                print("\tLast post-processed neighbors: ", knns_exact[-1])
+                if missing > 0:
+                    print(f"\tMissing post-processed neighbors: {missing}")
 
             post_process_time = time.time() - post_process_time
             # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
@@ -464,11 +469,9 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
     # The knns_lb - list can be overlapping, Thus apply slack (exclusion zone)
     # to take top-k neighbors
     for order in prange(n):
-        dists = np.full(n, np.inf, dtype=np.float64)
-        dists[knns_lb[order]] = D_lb[order]
-
         dist_pos = knns_lb[order]
-        dist_sort = D_lb[order]
+        dist_sort = np.copy(D_lb[order])
+        excluded = np.zeros(n, dtype=np.bool_)
 
         # top-k counter
         k_idx = 0
@@ -481,14 +484,15 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
 
             # check if the position is not within some exclusion zone to a previously
             # chosen index
-            if ((dists[pos] != np.inf) and
-                    (not np.isnan(dists[pos])) and
-                    (not np.isinf(dists[pos]))):
+            if (pos >= 0 and pos < n and
+                    (not excluded[pos]) and
+                    (not np.isnan(d)) and
+                    (not np.isinf(d))):
                 D_knn[order, k_idx] = d
                 knns[order, k_idx] = np.int32(pos)
 
                 # exclude all trivial matches and itself
-                dists[max(0, pos - halve_m): min(pos + halve_m, len(dists))] = np.inf
+                excluded[max(0, pos - halve_m): min(pos + halve_m, n)] = True
                 k_idx += 1
 
             # We found the top-k elements
