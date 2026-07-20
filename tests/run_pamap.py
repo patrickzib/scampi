@@ -1,7 +1,10 @@
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "../../")
-sys.path.insert(0, "../")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TESTS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(TESTS_DIR))
 
 import matplotlib as mpl
 
@@ -11,7 +14,7 @@ from scampi.plotting import *
 
 mpl.rcParams['figure.dpi'] = 150
 
-path = "../datasets/experiments/"
+path = str(PROJECT_ROOT / "datasets" / "experiments") + "/"
 
 
 def read_data(selection=None):

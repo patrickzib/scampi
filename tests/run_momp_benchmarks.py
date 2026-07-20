@@ -38,10 +38,13 @@ import argparse
 import itertools
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-os.environ["NUMBA_CACHE_DIR"] = "/tmp/motifs"
+if "NUMBA_CACHE_DIR" not in os.environ:
+    cache_name = f"scampi-numba-{os.getuid()}-{os.getpid()}"
+    os.environ["NUMBA_CACHE_DIR"] = str(Path(tempfile.gettempdir()) / cache_name)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -80,6 +83,15 @@ def parse_csv(value, cast=str):
     return [cast(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def parse_optional_int_csv(value):
+    def cast(item):
+        if item.lower() in {"none", "auto"}:
+            return None
+        return int(item)
+
+    return parse_csv(value, cast)
+
+
 def parse_methods(value):
     methods = parse_csv(value)
     unknown = sorted(set(methods) - set(AVAILABLE_METHODS))
@@ -97,11 +109,15 @@ def build_runs(args):
     if "scampi" in methods:
         for delta in args.scampi_deltas:
             runs.append(BenchmarkRun(
-                label=f"scampi delta={delta}",
+                label=(
+                    f"scampi delta={delta} "
+                    f"exact_refine={args.scampi_exact_refine}"
+                ),
                 backend="scampi",
                 kwargs={
                     "scampi_delta": delta,
                     "scampi_max_memory": args.scampi_max_memory,
+                    "scampi_exact_refine": args.scampi_exact_refine,
                 },
             ))
 
@@ -313,6 +329,11 @@ def parse_args():
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
                         default=[0.1])
     parser.add_argument("--scampi-max-memory", default="2 GB")
+    parser.add_argument(
+        "--scampi-exact-refine",
+        action="store_true",
+        help="Refine pyattimo seed positions with exact k-NN distances.",
+    )
 
     parser.add_argument("--faiss-M", type=lambda v: parse_csv(v, int),
                         default=[64])
@@ -320,14 +341,14 @@ def parse_args():
                         default=[500])
     parser.add_argument("--faiss-efSearch", type=lambda v: parse_csv(v, int),
                         default=[400])
-    parser.add_argument("--faiss-nlist", type=lambda v: parse_csv(v, int),
+    parser.add_argument("--faiss-nlist", type=parse_optional_int_csv,
                         default=[None])
     parser.add_argument("--faiss-nprobe", type=lambda v: parse_csv(v, int),
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),
                         default=[4])
     parser.add_argument("--faiss-search-radius", type=int, default=10)
-    parser.add_argument("--faiss-pq-m", type=lambda v: parse_csv(v, int),
+    parser.add_argument("--faiss-pq-m", type=parse_optional_int_csv,
                         default=[None])
     parser.add_argument("--faiss-pq-nbits", type=lambda v: parse_csv(v, int),
                         default=[8])
