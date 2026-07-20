@@ -1602,7 +1602,6 @@ def search_k_motiflets_elbow(
                     backend_imlp = VectorSearchNearestNeighbors(
                         m, k_max_,
                         index_strategy=backend,
-                        search_radius=5,
                         slack=slack,
                         n_jobs=n_jobs,
                         **kwargs
