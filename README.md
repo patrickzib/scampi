@@ -38,7 +38,21 @@ The MOMP benchmark entry points are:
 ```bash
 python benchmarks/cli/run_momp_benchmarks.py --list-methods
 python benchmarks/cli/run_momp_benchmarks.py --methods faiss-hnsw
+python benchmarks/cli/run_momp_benchmarks_latentmotifs.py --radius-mode 2r
+python benchmarks/cli/run_momp_benchmarks_latentmotifs.py --radius-mode r2
+python benchmarks/cli/run_synthetic_scampi_benchmarks.py --experiment series-length
+python benchmarks/cli/run_synthetic_scampi_benchmarks.py --experiment motif-length --plot-generated
+python benchmarks/cli/run_synthetic_scampi_benchmarks.py --experiment memory-budget
 ```
+
+The LatentMotif runner is intentionally separate because it derives its search
+radius from reference extents. Use `--list-radius-modes` to print the supported
+radius formulas.
+
+The synthetic SCAMPI runner is restricted to the SCAMPI/pyattimo backend. It
+writes full array-valued results and planted ground-truth positions to JSONL,
+and scalar plotting summaries with precision, recall, and F-score to CSV.
+
 ## SCAMPI (SCalable Anytime Mining of Patterns In time series)
 
 This paper introduces SCAMPI 

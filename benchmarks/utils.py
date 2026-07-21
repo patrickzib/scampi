@@ -114,7 +114,8 @@ def configure_paths(data_path=None, local_n=None):
 
 def run_safe(
         ds_name, series, l_range, k_max,
-        backend, subsampling=None, n_jobs=-1, local_n=None, **kwargs):
+        backend, subsampling=None, n_jobs=-1, local_n=None,
+        overwrite=False, **kwargs):
     try:
         if run_local:
             n = 10_000 if local_n is None else int(local_n)
@@ -133,6 +134,7 @@ def run_safe(
             backend=backend,
             subsampling=subsampling,
             n_jobs=n_jobs,
+            overwrite=overwrite,
             **kwargs
         )
 
@@ -200,6 +202,88 @@ def format_elbows(elbow_points):
     return format_motiflet(elbow_points)
 
 
+def load_result_frames(cache, new_filename, overwrite):
+    """Load existing full and scalar result frames for incremental benchmark runs."""
+    if new_filename in cache:
+        return cache[new_filename]
+
+    columns = [
+        'length',
+        'motif length',
+        'backend',
+        'time in s',
+        'memory in MB',
+        "extent",
+        "motiflet",
+        "elbows",
+    ]
+    json_path = new_filename + ".json"
+    csv_path = new_filename + ".csv"
+
+    if overwrite:
+        frames = (
+            pd.DataFrame(columns=columns),
+            pd.DataFrame(columns=columns),
+        )
+        cache[new_filename] = frames
+        return frames
+
+    if os.path.exists(json_path):
+        try:
+            df = pd.read_json(json_path)
+        except ValueError:
+            df = pd.DataFrame(columns=columns)
+    else:
+        df = pd.DataFrame(columns=columns)
+
+    if os.path.exists(csv_path):
+        df_single = pd.read_csv(csv_path)
+    else:
+        df_single = pd.DataFrame(columns=columns)
+
+    frames = (df, df_single)
+    cache[new_filename] = frames
+    return frames
+
+
+def has_existing_result(df_single, n, motif_length):
+    """Return true when a finite scalar result row already exists."""
+    if df_single.empty:
+        return False
+    required = {"length", "motif length", "extent"}
+    if not required.issubset(df_single.columns):
+        return False
+
+    lengths = pd.to_numeric(df_single["length"], errors="coerce")
+    motif_lengths = pd.to_numeric(df_single["motif length"], errors="coerce")
+    rows = df_single[
+        (lengths == int(n))
+        & (motif_lengths == int(motif_length))
+    ]
+    if rows.empty:
+        return False
+
+    extents = pd.to_numeric(rows["extent"], errors="coerce")
+    return bool(np.isfinite(extents).any())
+
+
+def drop_existing_rows(df, n, motif_length):
+    """Remove rows for a benchmark point before appending a fresh result."""
+    if df.empty:
+        return df
+    required = {"length", "motif length"}
+    if not required.issubset(df.columns):
+        return df
+
+    lengths = pd.to_numeric(df["length"], errors="coerce")
+    motif_lengths = pd.to_numeric(df["motif length"], errors="coerce")
+    mask = (
+        (lengths == int(n))
+        & (motif_lengths == int(motif_length))
+    )
+    return df.loc[~mask].copy()
+
+
 def find_dominant_window_sizes(X, offset=0.05):
     """Determine the Window-Size using dominant FFT-frequencies.
 
@@ -248,6 +332,7 @@ def test_motiflets_scale_n(
         backend="scampi",
         subsampling=None,
         n_jobs=-1,
+        overwrite=False,
         **kwargs
 ):
     if n_jobs == -1:
@@ -256,20 +341,12 @@ def test_motiflets_scale_n(
         # tuned for sonic / sone server
         n_jobs = min(60, num_cores - 2)
 
-    df = pd.DataFrame(
-        columns=['length', 'motif length', 'backend', 'time in s', 'memory in MB',
-                 "extent", "motiflet", "elbows"])
-
-    df_single = pd.DataFrame(
-        columns=['length', 'motif length', 'backend', 'time in s', 'memory in MB',
-                 "extent", "motiflet", "elbows"])
-
-
     last_time = -1
 
     # results = []
 
     last_n = 0
+    result_frames = {}
     for n in n_range:
         gc.collect()
 
@@ -282,6 +359,10 @@ def test_motiflets_scale_n(
         else:
             ts = ts[:n]
         ts_orig = ts
+        backend_name, new_filename = (
+            infer_filename(backend, ds_name, k_max, kwargs, subsampling))
+        df, df_single = load_result_frames(
+            result_frames, new_filename, overwrite)
 
         # larger than 2 hours
         if (len(ts_orig) <= last_n) or (last_time > 3600):
@@ -296,6 +377,13 @@ def test_motiflets_scale_n(
                 ts, _ = compute_paa(ts_orig, subsampling)
 
         for l in l_range:
+            if has_existing_result(df_single, ts_orig.shape[-1], l):
+                print(
+                    f"  Skipping: dataset={ds_name} m={l} n={ts_orig.shape[-1]} "
+                    f"backend='{backend_name}'; finite result already exists."
+                )
+                continue
+
             start = time.time()
             duration = start
 
@@ -340,8 +428,6 @@ def test_motiflets_scale_n(
                                 distance_single=mm.distance_single,
                                 preprocessing=preprocessing)
 
-                backend_name, new_filename = (
-                    infer_filename(backend, ds_name, k_max, kwargs, subsampling))
                 os.makedirs(os.path.dirname(new_filename), exist_ok=True)
 
                 duration = time.time() - start
@@ -355,7 +441,9 @@ def test_motiflets_scale_n(
                            extents,
                            motiflets,
                            elbow_points]
+                df = drop_existing_rows(df, ts_orig.shape[-1], l)
                 df.loc[len(df.index)] = current
+                df.sort_values(["length", "motif length"], inplace=True)
                 df.to_json(new_filename + ".json")
 
                 single_extent = float(np.asarray(extents[-1]).reshape(-1)[0])
@@ -371,8 +459,11 @@ def test_motiflets_scale_n(
                            single_extent,
                            single_motiflet,
                            elbow_points]
+                df_single = drop_existing_rows(df_single, ts_orig.shape[-1], l)
                 df_single.loc[len(df_single.index)] = current_single
+                df_single.sort_values(["length", "motif length"], inplace=True)
                 df_single.to_csv(new_filename + ".csv", index=False)
+                result_frames[new_filename] = (df, df_single)
 
                 print(f"  Completed in {duration:0.2f}s")
                 print(format_motiflet_result(
