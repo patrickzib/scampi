@@ -168,11 +168,16 @@ def load_existing_extents(filename, lengths, overwrite):
     if "motif length" not in existing or "extent" not in existing:
         return np.full(len(lengths), np.inf, dtype=np.float64)
 
-    existing = existing.set_index("motif length")
+    motif_lengths = pd.to_numeric(existing["motif length"], errors="coerce")
     extents = np.full(len(lengths), np.inf, dtype=np.float64)
     for i, length in enumerate(lengths):
-        if length in existing.index:
-            extents[i] = existing.loc[length, "extent"]
+        rows = existing[motif_lengths == int(length)]
+        if rows.empty:
+            continue
+        values = pd.to_numeric(rows["extent"], errors="coerce")
+        finite_values = values[np.isfinite(values)]
+        if not finite_values.empty:
+            extents[i] = float(finite_values.iloc[-1])
     return extents
 
 

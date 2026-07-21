@@ -387,6 +387,11 @@ def parse_args():
                         default=[-1])
     parser.add_argument("--subsampling", type=lambda v: parse_csv(v, int),
                         default=[8, 16])
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Recompute rows even if an existing result CSV has finite extents.",
+    )
     return parser.parse_args()
 
 
@@ -424,6 +429,7 @@ def main():
                 subsampling=subsampling,
                 n_jobs=args.n_jobs,
                 local_n=local_n,
+                overwrite=args.overwrite,
                 **kwargs,
             )
 
