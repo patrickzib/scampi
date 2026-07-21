@@ -9,8 +9,14 @@ This repository contains the full framework, benchmark datasets, and reproducibl
 experiments used in the evaluation.
 
 
-- `motiflets/`  
-  Core implementation of the k-Motiflets algorithm.
+- `scampi/`  
+  Core implementation of SCAMPI and the k-Motiflets algorithm.
+
+- `benchmarks/`  
+  Benchmark scripts and helpers. Command-line benchmark callers live in
+  `benchmarks/cli/`, conversion scripts in `benchmarks/converters/`, reusable
+  benchmark runners in `benchmarks/runners/`, and plotting scripts in
+  `benchmarks/plots/`.
 
 - `notebooks/`  
   Jupyter notebooks demonstrating typical use cases and reproducing paper figures.
@@ -20,11 +26,19 @@ experiments used in the evaluation.
   Please see https://sites.google.com/view/momp2024, too
 
 - `tests/`  
-  Unit tests for the implementation, and running the benchmarks
- 
-- `tests/csvs/`  
-  Raw experimental results for all competing methods.
+  Unit tests for the implementation.
 
+- `tests/results/`  
+  Benchmark output CSVs and converted result files.
+
+## Benchmark Scripts
+
+The MOMP benchmark entry points are:
+
+```bash
+python benchmarks/cli/run_momp_benchmarks.py --list-methods
+python benchmarks/cli/run_momp_benchmarks.py --methods faiss-hnsw
+```
 ## SCAMPI (SCalable Anytime Mining of Patterns In time series)
 
 This paper introduces SCAMPI 
