@@ -190,7 +190,7 @@ def plot_motifset(
                     if motif_length_disp > max_points:
                         motif_factor = int(
                             max(1, np.floor(motif_length_disp / max_points)))
-                        print(f"factor {motif_factor}")
+                        # print(f"factor {motif_factor}")
 
                     df = pd.DataFrame()
                     df["time"] = range(0, motif_length_disp, motif_factor)

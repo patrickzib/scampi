@@ -24,7 +24,7 @@ Run several noise levels and seeds:
 Defaults
 --------
 The default experiment is ``series-length``. It uses one fixed motif length
-``512`` and sweeps these time-series lengths:
+``2048`` and sweeps these time-series lengths:
     10000, 50000, 100000, 250000, 500000, 750000, 1000000
 
 The ``motif-length`` experiment uses one fixed time-series length ``200000``
@@ -32,7 +32,7 @@ and sweeps these motif lengths:
     256, 512, 1024, 2048, 4096
 
 The ``memory-budget`` experiment uses fixed time-series length ``200000`` and
-fixed motif length ``512``, and sweeps these SCAMPI max-memory budgets:
+fixed motif length ``2048``, and sweeps these SCAMPI max-memory budgets:
     1GB, 2GB, 4GB, 8GB
 
 Only ``memory-budget`` sweeps ``--scampi-max-memories``. The ``series-length``
@@ -42,19 +42,21 @@ and ``motif-length`` experiments each use the single fixed
 All experiments use these shared defaults:
     noise levels: 0, 0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1.0
     seeds: 1, 2, 3
-    planted motif instances: 5
+    planted motif instances: same as k max
     motif amplitude: 5.0
     motif cycles: 2.0
     random-walk sigma: 1.0
     k max: 10
     top N: 1
     SCAMPI deltas: 0.1
-    SCAMPI max memory: 2 GB
+    SCAMPI max memory: 8 GB
     exact refine: false
 
 This script exercises the SCAMPI/pyattimo backend.
 Full array-valued results are appended to JSONL files, while scalar plotting values
 and recovery metrics are written to CSV summaries.
+Internally, the script calls SCAMPI with ``k_max + 1`` because returned
+motiflet arrays are indexed by the motiflet size ``k``.
 """
 
 import argparse
@@ -78,6 +80,7 @@ import pandas as pd
 
 from benchmarks.cli.run_momp_benchmarks import parse_csv
 from benchmarks.synthetic import (
+    compute_ground_truth_extent,
     generate_random_walk_with_planted_motif,
     json_dumps,
     select_best_motiflet,
@@ -101,6 +104,7 @@ SUMMARY_COLUMNS = [
     "selected_k",
     "time in s",
     "memory in MB",
+    "ground truth extent",
     "selected extent",
     "precision",
     "recall",
@@ -152,7 +156,7 @@ def parse_args():
     parser.add_argument(
         "--fixed-motif-length",
         type=int,
-        default=512,
+        default=2048,
         help="Motif length used for the series-length sweep.",
     )
     parser.add_argument(
@@ -167,7 +171,12 @@ def parse_args():
         default=parse_csv("1,2,3", int),
         help="Comma-separated random seeds.",
     )
-    parser.add_argument("--n-instances", type=int, default=5)
+    parser.add_argument(
+        "--n-instances",
+        type=int,
+        default=None,
+        help="Number of planted motif instances. Defaults to --k-max.",
+    )
     parser.add_argument("--motif-amplitude", type=float, default=5.0)
     parser.add_argument("--motif-cycles", type=float, default=2.0)
     parser.add_argument("--random-walk-sigma", type=float, default=1.0)
@@ -183,7 +192,7 @@ def parse_args():
     parser.add_argument("--n-jobs", type=int, default=-1)
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
                         default=[0.1])
-    parser.add_argument("--scampi-max-memory", default="2 GB")
+    parser.add_argument("--scampi-max-memory", default="8 GB")
     parser.add_argument(
         "--scampi-max-memories",
         type=lambda value: parse_csv(value, str),
@@ -205,7 +214,7 @@ def parse_args():
     parser.add_argument(
         "--plot-max-points",
         type=int,
-        default=2_000,
+        default=1_000,
         help="Maximum points passed to SCAMPI plotting downsampling.",
     )
     parser.add_argument(
@@ -219,7 +228,10 @@ def parse_args():
         action="store_true",
         help="Recompute rows already present in the summary CSV.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.n_instances is None:
+        args.n_instances = args.k_max
+    return args
 
 
 def experiment_grid(args, experiment):
@@ -239,6 +251,15 @@ def memory_budgets(args, experiment):
     if experiment == "memory-budget":
         return args.scampi_max_memories
     return [args.scampi_max_memory]
+
+
+def can_implant_non_overlapping(n, motif_length, n_instances):
+    return int(n) >= int(motif_length) * int(n_instances)
+
+
+def scampi_search_k_max(args):
+    """SCAMPI stores motiflet candidates by k, so index k requires k_max > k."""
+    return int(args.k_max) + 1
 
 
 def output_paths(output_dir, experiment):
@@ -351,7 +372,7 @@ def save_generated_plot(
     if selected_motiflet:
         motifsets = [np.array(selected_motiflet, dtype=np.int32)]
 
-    fig, _ = plot_motifset(
+    fig, axes = plot_motifset(
         ds_name,
         series,
         motifsets=motifsets,
@@ -360,6 +381,20 @@ def save_generated_plot(
         max_points=max_points,
         show=False,
     )
+    ax_ts = axes[0, 0]
+    for i, pos in enumerate(ground_truth):
+        ax_ts.axvspan(
+            int(pos),
+            int(pos + motif_length),
+            color="green",
+            alpha=0.18,
+            linewidth=0,
+            label="Ground Truth" if i == 0 else None,
+            zorder=0,
+        )
+    if len(ground_truth) > 0:
+        ax_ts.legend(loc="upper right")
+
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
@@ -411,8 +446,9 @@ def run_one(
         scampi_max_memory=scampi_max_memory,
         scampi_exact_refine=args.scampi_exact_refine,
     )
+    search_k_max = scampi_search_k_max(args)
     extents, motiflets, elbows = model.fit_k_elbow(
-        args.k_max,
+        search_k_max,
         motif_length,
         top_N=args.top_n,
         plot_elbows=False,
@@ -428,6 +464,11 @@ def run_one(
         tolerance,
     )
     metrics = selected["metrics"]
+    ground_truth_extent = compute_ground_truth_extent(
+        series,
+        ground_truth,
+        motif_length,
+    )
     saved_plot_path = None
     if args.plot_generated:
         saved_plot_path = plot_path(
@@ -464,10 +505,12 @@ def run_one(
         "scampi_exact_refine": args.scampi_exact_refine,
         "slack": args.slack,
         "k_max": args.k_max,
+        "scampi_search_k_max": search_k_max,
         "top_n": args.top_n,
         "time_in_s": duration,
         "memory_in_mb": model.memory_usage,
         "ground_truth_positions": ground_truth,
+        "ground_truth_extent": ground_truth_extent,
         "clean_motif": motif,
         "extents": extents,
         "motiflets": motiflets,
@@ -495,6 +538,7 @@ def run_one(
         "selected_k": args.n_instances,
         "time in s": duration,
         "memory in MB": model.memory_usage,
+        "ground truth extent": ground_truth_extent,
         "selected extent": selected["extent"],
         "precision": metrics["precision"],
         "recall": metrics["recall"],
@@ -549,6 +593,15 @@ def main():
         completed = set() if args.overwrite else existing_keys(summary_path)
 
         for n, motif_length in experiment_grid(args, experiment):
+            if not can_implant_non_overlapping(
+                    n, motif_length, args.n_instances):
+                print(
+                    f"Skipping {experiment}: n={n} m={motif_length} "
+                    f"instances={args.n_instances}; non-overlapping planted "
+                    f"motifs require n >= {motif_length * args.n_instances}."
+                )
+                continue
+
             for noise in args.noise_levels:
                 for seed in args.seeds:
                     for scampi_delta in args.scampi_deltas:
