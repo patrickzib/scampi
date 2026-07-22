@@ -165,6 +165,29 @@ def match_positions(recovered, ground_truth, tolerance):
     }
 
 
+def compute_ground_truth_extent(series, positions, motif_length):
+    """Compute exact extent of the implanted noisy motif instances."""
+    positions = clean_positions(positions)
+    if len(positions) < 2:
+        return math.inf
+
+    from scampi.distances import map_distances
+    from scampi.scampi import get_pairwise_extent_raw
+
+    distance_preprocessing, _, distance_single = map_distances("znormed_ed")
+    preprocessing = np.array(
+        [distance_preprocessing(series, motif_length)],
+        dtype=np.float64,
+    )
+    return float(get_pairwise_extent_raw(
+        np.asarray(series, dtype=np.float64).reshape(1, -1),
+        np.asarray(positions, dtype=np.int32),
+        motif_length,
+        distance_single=distance_single,
+        preprocessing=preprocessing,
+    ))
+
+
 def to_jsonable(value):
     """Convert NumPy-heavy benchmark values into strict JSON values."""
     if value is None:
