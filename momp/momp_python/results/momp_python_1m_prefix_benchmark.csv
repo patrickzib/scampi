@@ -1,0 +1,2 @@
+dataset,mat_key,algorithm,original_length,prefix_length,motif_length,distance,location_0,location_1,location_0_matlab,location_1_matlab,runtime_seconds,iterations,final_pruning,status,error
+EOG_one_hour_400_Hz.mat,EOG_one_hour_400_Hz,mpx-v2,1439997,1000000,256,0.17184388522607263,268774,767126,268775,767127,560.7298450469971,0,,ok,

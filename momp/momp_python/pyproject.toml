@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "momp-python"
+version = "0.1.0"
+description = "Standalone Python app for MOMP-style motif-only search"
+requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+mat = ["scipy"]
+plot = ["matplotlib"]
+speed = ["numba"]
+
+[project.scripts]
+momp-python = "momp_python.cli:main"
+momp-python-benchmark = "momp_python.benchmark:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
