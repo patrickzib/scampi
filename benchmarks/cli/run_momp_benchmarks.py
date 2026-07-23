@@ -111,13 +111,13 @@ def build_runs(args):
             runs.append(BenchmarkRun(
                 label=(
                     f"scampi delta={delta} "
-                    f"exact_refine={args.scampi_exact_refine}"
+                    f"exact_refine={args.exact_refine}"
                 ),
                 backend="scampi",
                 kwargs={
                     "scampi_delta": delta,
                     "scampi_max_memory": args.scampi_max_memory,
-                    "scampi_exact_refine": args.scampi_exact_refine,
+                    "scampi_exact_refine": args.exact_refine,
                 },
             ))
 
@@ -330,9 +330,13 @@ def parse_args():
                         default=[0.1])
     parser.add_argument("--scampi-max-memory", default="2 GB")
     parser.add_argument(
-        "--scampi-exact-refine",
-        action="store_true",
-        help="Refine pyattimo seed positions with exact k-NN distances.",
+        "--exact-refine",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Refine seed positions with exact k-NN distances. Enabled by "
+            "default; use --no-exact-refine to store raw backend motiflets."
+        ),
     )
 
     parser.add_argument("--faiss-M", type=lambda v: parse_csv(v, int),

@@ -1,206 +1,111 @@
-import pandas as pd
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from benchmarks import utils as ut
-from scampi.distances import *
-from scampi.scampi import _sliding_dot_product, _argknn
+import numpy as np
+from numba import set_num_threads
 
-from numba.typed import List
-from numba import njit, prange, set_num_threads
-
-k = 10
-momp_path = f"results/pyattimo_momp/k20/"
-
-datasets = [
-    "EOG_one_hour_50_Hz",
-    "EOG_one_hour_400_Hz",
-    "CinC_Challenge",
-    "swtAttack7",
-    "MGHSleepElectromyography",
-    "recorddata",
-    "Challenge2009Respiration500HZ",
-    "Lab_K_060314",
-    "Bird12-Week3_2018_1_10",
-    "BlackLeggedKittiwake",
-    "water",
-    "FingerFlexionECoG",
-    "SpainishEnergyDataset",
-    "SpainishEnergyDataset5sec",
-    "lorenzAttractorsLONG",
-    "stator_winding",
-    "solarwind",
-    "WindTurbine",
-    "SynchrophasorEventsLarge",
-    "Lab_FD_061014",
-    "house",
-    "HAR_Ambient_Sensor_Data",
-    "Challenge2009TestSetA_101a",
-    "swtAttack38",
-]
-
-def parse_array(cell):
-    # Strip brackets and parse with space separator
-    cleaned = cell.strip('[]')
-    array = np.fromstring(cleaned, sep=' ')
-    return array.astype(np.int64)  # Convert to int if no decimals expected
-
-def flatten_with_empties(arr):
-    non_empty = [sub for sub in arr if len(sub) > 0]
-    return np.concatenate(non_empty) if non_empty else np.array([])
-
-def test_plot():
-    set_num_threads(4)
-
-    for ds_name in datasets:
-
-        df = pd.DataFrame(columns=[
-            "length",
-            "motif length",
-            "backend",
-            "time in s",
-            "memory in MB",
-            "motiflet",
-            "extent"])
-
-        ts = ut.read_mat(ds_name)
-
-        path1 = f"results/pyattimo_0.7.0_8GB/scalability_n_{ds_name}_10_pyattimo_delta_0.1.csv"
-        df_attimo = pd.read_csv(path1)
-        df_attimo = df_attimo.set_index("motif length")
-
-        for i, motif_length in enumerate([512, 1024, 2048, 4096]):
-            print(f"Processing dataset {ds_name} with motif length {motif_length}", flush=True)
-
-            if motif_length in df_attimo.index:
-                current_motiflets = parse_array(df_attimo.loc[motif_length, "motiflet"])
-                current_extent = df_attimo.loc[motif_length, "extent"]
-                best_motiflet, min_extent = compute_knn(
-                    ts.copy(),
-                    current_motiflets,
-                    motif_length,
-                    k - 1
-                )
-                if min_extent > current_extent:
-                    min_extent = current_extent
-                    best_motiflet = current_motiflets
-            else:
-                best_motiflet = []
-                min_extent = np.inf
-
-            if motif_length in df_attimo.index:
-                time = df_attimo.loc[motif_length, "time in s"]
-                memory = df_attimo.loc[motif_length, "memory in MB"]
-            else:
-                last_time = df_attimo["time in s"].values[-1]
-                last_memory = df_attimo["memory in MB"].values[-1]
-                last_length = df_attimo["motif length"].values[-1]
-                factor = motif_length / last_length
-                time = last_time * factor * 2
-                memory = last_memory * factor
-
-                print(f"Extrapolating time and memory for motif length {motif_length} "
-                      f"based on last known length {last_length}")
-                print(f"Factor: {factor}")
-                print(f"\tEstimated time: {time}, Estimated memory: {memory}")
-
-            current = [
-                len(ts),
-                motif_length,
-                "attimo",
-                time,
-                memory,
-                best_motiflet,
-                min_extent
-            ]
-            df.loc[len(df.index)] = current
-
-        new_filename = f"results/pyattimo_converted/scalability_n_{ds_name}_{k}_pyattimo_delta_0.1.csv"
-        df.to_csv(new_filename, index=False)
+from benchmarks.converters.utils import ConverterUtils, RESULTS_DIR, parser
 
 
-@njit(cache=True, parallel=True)
-def compute_knn(
-        ts,
-        motiflets,
-        m,
-        k,
-        slack=0.5,
-        distance=znormed_euclidean_distance,
-        distance_single=znormed_euclidean_distance_single,
-        distance_preprocessing=sliding_mean_std,
-):
-    halve_m = np.int32(m * slack)
-    n = ts.shape[-1] - m + 1
+def parse_args():
+    arg_parser = parser(
+        "Convert pyattimo CSVs by recomputing exact k-NN motiflets from "
+        "stored pyattimo seed positions."
+    )
+    ConverterUtils.add_common_args(arg_parser)
+    arg_parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=RESULTS_DIR / "pyattimo_0.7.0_8GB",
+        help="Directory containing pyattimo CSVs.",
+    )
+    arg_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=RESULTS_DIR / "pyattimo_converted",
+        help="Directory for converted pyattimo CSVs.",
+    )
+    arg_parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=4,
+        help="Numba thread count for the refinement kernel.",
+    )
+    return arg_parser.parse_args()
 
-    preprocessing = distance_preprocessing(ts, m)
 
-    knns = np.zeros((len(motiflets), k), dtype=np.int32)
-    extents = np.zeros(len(motiflets), dtype=np.float64)
+def input_filename(input_dir, ds_name, k_max):
+    return input_dir / f"scalability_n_{ds_name}_{k_max}_pyattimo_delta_0.1.csv"
 
-    for i in prange(len(motiflets)):
-        start = motiflets[i]
-        if start < len(ts) - m + 1:
-            dot_rolled = _sliding_dot_product(
-                ts[start:start + m],
-                ts,
-            )
-            dist = distance(dot_rolled, n, m, preprocessing, start, halve_m)
-            knns[i] = _argknn(dist, k, m, slack=slack)
 
-            extents[i] = get_pairwise_extent_raw_1d(
-                ts, knns[i], m, distance_single, preprocessing)
+def output_filename(output_dir, ds_name, k_max):
+    return output_dir / f"scalability_n_{ds_name}_{k_max}_pyattimo_delta_0.1.csv"
+
+
+def convert_dataset(ds_name, lengths, k_max, input_dir, output_dir, ut):
+    input_path = input_filename(input_dir, ds_name, k_max)
+    df_attimo = ConverterUtils.indexed_csv(input_path)
+    if df_attimo is None:
+        print(f"Skipping {ds_name}; missing {input_path}")
+        return
+
+    print(f"Converting {ds_name}")
+    ts = ut.read_mat(ds_name)
+    df = ConverterUtils.result_frame()
+
+    for motif_length in lengths:
+        print(f"  Processing m={motif_length}", flush=True)
+        if motif_length in df_attimo.index:
+            current_motiflets = ConverterUtils.parse_array(
+                df_attimo.loc[motif_length, "motiflet"])
+            current_extent = df_attimo.loc[motif_length, "extent"]
+            best_motiflet, min_extent = ConverterUtils.exact_refine_from_seeds(
+                ts, current_motiflets, motif_length, k_max)
+            if min_extent > current_extent:
+                min_extent = current_extent
+                best_motiflet = current_motiflets
+            time_value = df_attimo.loc[motif_length, "time in s"]
+            memory_value = df_attimo.loc[motif_length, "memory in MB"]
         else:
-            extents[i] = np.inf
+            best_motiflet = []
+            min_extent = np.inf
+            time_value = ConverterUtils.extrapolate_metric(
+                df_attimo, motif_length, "time in s")
+            memory_value = ConverterUtils.extrapolate_metric(
+                df_attimo, motif_length, "memory in MB")
 
-    min_pos = np.argmin(extents)
-    best_motiflet = knns[min_pos]
-    min_extent = extents[min_pos]
+        df.loc[len(df.index)] = [
+            len(ts),
+            motif_length,
+            "attimo",
+            time_value,
+            memory_value,
+            best_motiflet,
+            min_extent,
+        ]
 
-    return best_motiflet, min_extent
+    ConverterUtils.write_csv(df, output_filename(output_dir, ds_name, k_max))
 
 
-@njit(cache=True)
-def get_pairwise_extent_raw_1d(
-        series, motifset_pos, motif_length,
-        distance_single, preprocessing):
-    """Computes the extent of the motifset via pairwise comparisons.
+def main():
+    args = parse_args()
+    set_num_threads(args.num_threads)
+    from benchmarks import utils as ut
 
-    Parameters
-    ----------
-    series : array-like
-        The time series
-    motifset_pos : array-like
-        The motif set start-offsets
-    motif_length : int
-        The motif length
-    upperbound : float, default: np.inf
-        Upper bound on the distances. If passed, will apply admissible pruning
-        on distance computations, and only return the actual extent, if it is lower
-        than `upperbound`
+    ut.configure_paths(data_path=args.data_path)
+    for ds_name in ConverterUtils.selected_datasets(args, ut.filenames):
+        convert_dataset(
+            ds_name,
+            args.lengths,
+            args.k_max,
+            args.input_dir,
+            args.output_dir,
+            ut,
+        )
 
-    Returns
-    -------
-    motifset_extent : float
-        The extent of the motif set, if smaller than `upperbound`, else np.inf
-    """
 
-    if -1 in motifset_pos:
-        return np.inf
-
-    motifset_extent = np.float64(0.0)
-
-    for ii in np.arange(len(motifset_pos) - 1):
-        i = motifset_pos[ii]
-        a = series[i:i + motif_length]
-
-        for jj in np.arange(ii + 1, len(motifset_pos)):
-            j = motifset_pos[jj]
-            b = series[j:j + motif_length]
-            dist = distance_single(a, b, i, j, preprocessing)
-            motifset_extent = max(motifset_extent, dist)
-
-    return motifset_extent
+if __name__ == "__main__":
+    main()
