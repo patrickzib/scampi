@@ -24,6 +24,7 @@ warnings.simplefilter("ignore")
 
 RESULTS_DIR = PROJECT_ROOT / "tests" / "results"
 HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp"
+MOMP_DOWNLOAD_URL = "https://drive.google.com/drive/folders/1aKjBtu88tuLpv4xaiYEfFm3ZUtfEYmh5"
 
 run_local = True
 path = str(PROJECT_ROOT / "datasets" / "momp") + os.sep
@@ -60,8 +61,17 @@ filenames = {
 }
 
 def read_mat(filename):
-    print(f"  Reading: {path + filename + '.mat'}")
-    data = sio.loadmat(path + filename + '.mat')
+    mat_path = Path(path) / f"{filename}.mat"
+    print(f"  Reading: {mat_path}")
+    if not mat_path.exists():
+        raise FileNotFoundError(
+            f"MOMP dataset file not found: {mat_path}\n"
+            f"Download the official MOMP datasets from: {MOMP_DOWNLOAD_URL}\n"
+            f"Then pass the containing directory with --data-path or place the "
+            f".mat files in the configured data directory: {path}"
+        )
+
+    data = sio.loadmat(mat_path)
     # extract data array
     key = filename
     try:
