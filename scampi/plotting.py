@@ -50,38 +50,6 @@ def plot_dataset(
     )
 
 
-def append_all_motif_sets(df, motif_sets, method_name, D_full):
-    """Utility function.
-
-    Parameters
-    ----------
-    df: pd.DataFrame
-        a dataframe to append to
-    motif_sets: 2d-array-like
-        The motif-sets to append under row `method_name`
-    method_name: String
-        The column to append as
-    D_full:
-        The distance matrix
-
-    Returns
-    -------
-    df: pd.DataFrame
-        the dataframe with appended data
-
-    """
-
-    filtered_motif_sets = [m for m in motif_sets if m is not None]
-    extent = [ml.get_pairwise_extent(D_full, motiflet) for motiflet in
-              filtered_motif_sets]
-    count = [len(motiflet) for motiflet in filtered_motif_sets]
-
-    for m, e, c in zip(filtered_motif_sets, extent, count):
-        entry = {"Method": method_name, "Motif": m, "Extent": e, "k": c}
-        df = df.append(entry, ignore_index=True)
-    return df
-
-
 def plot_motifset(
         ds_name,
         data,
@@ -191,6 +159,7 @@ def plot_motifset(
     sns.despine()
 
     y_labels = []
+    gt_count = 0
 
     if motifsets is not None:
         for i, motifset in enumerate(motifsets_sampled):
@@ -221,7 +190,7 @@ def plot_motifset(
                     if motif_length_disp > max_points:
                         motif_factor = int(
                             max(1, np.floor(motif_length_disp / max_points)))
-                        print(f"factor {motif_factor}")
+                        # print(f"factor {motif_factor}")
 
                     df = pd.DataFrame()
                     df["time"] = range(0, motif_length_disp, motif_factor)
@@ -247,7 +216,7 @@ def plot_motifset(
                         x="time",
                         y="value")
 
-        gt_count = 0
+    if len(ground_truth) > 0:
         motif_set_count = 0 if motifsets is None else len(motifsets)
 
         for aaa, column in enumerate(ground_truth):
@@ -279,9 +248,8 @@ def plot_motifset(
 
                         axes[1, 0].add_patch(rect)
 
-        if ground_truth is not None and len(ground_truth) > 0:
-            gt_count = 1
-            y_labels.append("Ground Truth")
+        gt_count = 1
+        y_labels.append("Ground Truth")
 
     if motifsets is not None:
         for i, motif_set in enumerate(motifsets_sampled):
@@ -624,7 +592,6 @@ def plot_grid_motiflets(
 
     y_labels = []
     ii = -1
-    print("Debug", elbow_points)
     motiflets_sampled = motifsets_sampled[elbow_points]
     motiflets = motifsets[elbow_points]
     for i, motiflet in enumerate(motiflets_sampled):
@@ -739,142 +706,3 @@ def plot_grid_motiflets(
     plt.tight_layout()
     gs.tight_layout(fig)
     plt.show()
-
-
-def plot_all_competitors(
-        data,
-        ds_name,
-        motifsets,
-        motif_length,
-        method_names=None,
-        ground_truth=None,
-        plot_index=None,
-        color_palette=sns.color_palette("tab10"),
-        slack=0.5):
-    """Plots the found motif sets of multiple competitor methods
-
-    Parameters
-    ----------
-    ds_name: String
-        The name of the time series
-    data: array-like
-        The time series data
-    motifsets: 2d array-like
-        The found motif sets for plotting
-    motif_length: int
-        The motif length found.
-    method_names: array-like
-        Names of the method to plot
-    ground_truth: pd.Series
-        Ground-truth information as pd.Series.
-    grid_dim: int
-        The dimensionality of the grid (number of columns)
-    plot_index: int
-        Plots only the passed methods in the given order
-    """
-
-    # convert to numpy array
-    _, data_raw = ml.pd_series_to_numpy(data)
-    D_full = ml.compute_distances_full(data_raw, motif_length, slack=slack)
-    indices = np.arange(len(motifsets))
-
-    dists = [ml.get_pairwise_extent(D_full, motiflet_pos, upperbound=np.inf)
-             for motiflet_pos in motifsets]
-
-    plot_grid_motiflets(
-        ds_name, data, motifsets, indices,
-        dists, motif_length,
-        font_size=26,
-        method_names=method_names,
-        ground_truth=ground_truth,
-        color_palette=color_palette,
-        plot_index=plot_index)
-
-
-def plot_competitors(
-        data,
-        ds_name,
-        motifsets,
-        motif_length,
-        prefix="",
-        filter=True,
-        ground_truth=None,
-        slack=0.5):
-    """Plots motif sets of a single competitor method.
-
-    Parameters
-    ----------
-    data: array-like
-        The time series data
-    ds_name: String
-        The name of the time series
-    motifsets: array-like
-        The motifset for plotting
-    motif_length: int
-        The motif length found.
-    prefix: String
-        The method name
-    filter: bool, default=True
-        filter overlapping motifs
-    ground_truth: pd.Series
-        Ground-truth information as pd.Series.
-
-    """
-
-    # convert to numpy array
-    _, data_raw = ml.pd_series_to_numpy(data)
-
-    D_full = ml.compute_distances_full(data_raw, motif_length, slack=slack)
-
-    last = -1
-    motifsets_filtered = []
-    for motifset in motifsets:
-        if ((len(motifset) > last) or (not filter)):
-            motifsets_filtered.append(motifset)
-            last = len(motifset)
-    motifsets_filtered = np.array(motifsets_filtered)
-
-    elbow_points = np.arange(len(motifsets_filtered))
-
-    if filter:
-        elbow_points = ml.filter_unique(elbow_points, motifsets_filtered, motif_length)
-
-    dists = [ml.get_pairwise_extent(D_full, motiflet_pos, upperbound=np.inf)
-             for motiflet_pos in motifsets_filtered]
-
-    plot_grid_motiflets(
-        ds_name, data, motifsets_filtered, elbow_points,
-        dists, motif_length, method_name=prefix,
-        ground_truth=ground_truth)
-
-    return motifsets_filtered[elbow_points]
-
-
-def format_key(e):
-    key = ""
-    if e > 0:
-        key = "+" + str(e * 100) + "%"
-    elif e < 0:
-        key = str(e * 100) + "%"
-    return key
-
-
-def to_df(motif_sets, method_name, df, df2=None):
-    df_all_1 = pd.DataFrame()
-    df_all_2 = pd.DataFrame()
-    for key in motif_sets:
-        ms_set_finder = motif_sets[key]
-        df_all_1[method_name + " Top-1 " + key] = [ms_set_finder[-1]]
-        df[method_name + " Top-1 " + key] = [ms_set_finder[-1]]
-
-        if df2 is not None:
-            df_all_2[method_name + " Top-2 " + key] = [ms_set_finder[-2]]
-            df2[method_name + " Top-2 " + key] = [ms_set_finder[-2]]
-
-    if df2 is not None:
-        df_all = (pd.concat([df_all_1, df_all_2], axis=1)).T
-    else:
-        df_all = df_all_1.T
-
-    df_all.rename(columns={0: "offsets"}, inplace=True)
-    return df_all

@@ -22,7 +22,71 @@ index_strategies = [
 
 
 class VectorSearchNearestNeighbors:
-    """ VectorSearch-based nearest neighbor computations for motiflet discovery. """
+    """Approximate vector-search backend for motiflet k-NN candidates.
+
+    The backend z-normalizes all subsequences of length ``m``, queries an
+    approximate nearest-neighbor index, restores the original time-series
+    offsets after an internal shuffle, and applies the motiflet exclusion zone
+    before returning exact z-normalized distances for the selected neighbors.
+
+    Parameters
+    ----------
+    m : int
+        Motif length.
+    k : int
+        Number of non-overlapping neighbors to return per subsequence. The
+        returned arrays have shape ``(n - m + 1, k)``.
+    index_strategy : {"faiss", "annoy", "pynndescent"}, default="faiss"
+        Approximate nearest-neighbor implementation to use.
+    search_radius : int, default=5
+        Multiplier for the raw candidate shortlist size. For FAISS, the index
+        is queried for ``search_radius * k`` neighbors before exclusion-zone
+        post-processing.
+    slack : float, default=0.5
+        Exclusion-zone factor around accepted neighbors.
+    n_jobs : int, default=4
+        Worker/thread count. Values below 1 use ``os.cpu_count()``.
+    verbose : bool, default=True
+        Whether to print index parameters and post-processing diagnostics.
+    **kwargs
+        faiss_index : {"HNSW", "LSH", "IVF", "IVFPQ", "IVFPQ+HNSW"}
+            FAISS index type. Required when ``index_strategy="faiss"``.
+        faiss_M : int, default=64
+            HNSW graph degree.
+        faiss_efConstruction : int, default=500
+            HNSW construction parameter.
+        faiss_efSearch : int, default=800
+            HNSW search parameter. The effective value is at least
+            ``search_radius * k``.
+        faiss_nlist : int or None, default=None
+            Number of IVF cells. ``None`` uses ``sqrt(n_windows)``.
+        faiss_nprobe : int, default=32
+            Number of IVF cells to probe.
+        faiss_nbits : int, default=4
+            LSH bits multiplier. The actual LSH bit count is
+            ``faiss_nbits * m``.
+        faiss_pq_m : int or None, default=None
+            Number of product-quantizer subquantizers. If omitted, a divisor of
+            the vector dimension up to 64 is chosen.
+        faiss_pq_nbits : int, default=8
+            Bits per product-quantizer code.
+        annoy_n_trees : int, default=10
+            Number of Annoy trees.
+        annoy_search_k : int, default=-1
+            Annoy search effort.
+        pynndescent_n_neighbors : int, default=10
+            Number of neighbors for NNDescent graph construction.
+        pynndescent_leaf_size : int, default=24
+            NNDescent tree leaf size.
+        pynndescent_pruning_degree_multiplier : float, default=1.0
+            NNDescent graph pruning multiplier.
+        pynndescent_diversify_prob : float, default=1.0
+            NNDescent diversification probability.
+        pynndescent_n_search_trees : int, default=1
+            NNDescent search tree count.
+        pynndescent_search_epsilon : float, default=0.1
+            NNDescent search epsilon.
+    """
 
     def __init__(
             self,
@@ -46,130 +110,196 @@ class VectorSearchNearestNeighbors:
         self.verbose = verbose
 
         #### faiss
-        self.faiss_index = None
-        if "faiss_index" in kwargs:
-            self.faiss_index = kwargs["faiss_index"]
-
-        self.M = kwargs["faiss_M"] if "faiss_M" in kwargs else 64
-        self.efConstruction = kwargs[
-            "faiss_efConstruction"] if "faiss_efConstruction" in kwargs else 500
-        self.efSearch = kwargs["faiss_efSearch"] if "faiss_efSearch" in kwargs else 800
-        self.efSearch = max(search_radius * self.k, self.efSearch)
+        self.faiss_index = kwargs.get("faiss_index")
+        self.M = kwargs.get("faiss_M", 64)
+        self.efConstruction = kwargs.get("faiss_efConstruction", 500)
+        self.efSearch = kwargs.get("faiss_efSearch", 800)
+        self.efSearch = max(self.search_radius * self.k, self.efSearch)
 
         # number of clusters/cells
-        self.nlist = kwargs["faiss_nlist"] if "faiss_nlist" in kwargs else None
+        self.nlist = kwargs.get("faiss_nlist")
         if self.nlist:
             self.nlist = int(self.nlist)
 
         # number of cells to search
-        self.nprobe = kwargs["faiss_nprobe"] if "faiss_nprobe" in kwargs else 32
+        self.nprobe = kwargs.get("faiss_nprobe", 32)
 
         # number of bits used for hashing (resolution)
-        self.nBits = kwargs["faiss_nbits"] if "faiss_nbits" in kwargs else 4
+        self.nBits = kwargs.get("faiss_nbits", 4)
+        self.pq_m = kwargs.get("faiss_pq_m")
+        self.pq_nbits = kwargs.get("faiss_pq_nbits", 8)
 
         #### annoy
 
-        self.annoy_n_trees \
-            = kwargs["annoy_n_trees"] if "annoy_n_trees" in kwargs else 10
-        self.annoy_search_k \
-            = kwargs["annoy_search_k"] if "annoy_search_k" in kwargs else -1
+        self.annoy_n_trees = kwargs.get("annoy_n_trees", 10)
+        self.annoy_search_k = kwargs.get("annoy_search_k", -1)
 
         #### pynndescent
 
-        self.pynndescent_n_neighbors \
-            = kwargs[
-            "pynndescent_n_neighbors"] if "pynndescent_n_neighbors" in kwargs else 10
-        self.pynndescent_leaf_size \
-            = kwargs[
-            "pynndescent_leaf_size"] if "pynndescent_leaf_size" in kwargs else 24
-        self.pynndescent_pruning_degree_multiplier \
-            = kwargs[
-            "pynndescent_pruning_degree_multiplier"] if "pynndescent_pruning_degree_multiplier" in kwargs else 1.0
-        self.pynndescent_diversify_prob \
-            = kwargs[
-            "pynndescent_diversify_prob"] if "pynndescent_diversify_prob" in kwargs else 1.0
-        self.pynndescent_n_search_trees \
-            = kwargs[
-            "pynndescent_n_search_trees"] if "pynndescent_n_search_trees" in kwargs else 1
-        self.pynndescent_search_epsilon \
-            = kwargs[
-            "pynndescent_search_epsilon"] if "pynndescent_search_epsilon" in kwargs else 0.1
+        self.pynndescent_n_neighbors = kwargs.get("pynndescent_n_neighbors", 10)
+        self.pynndescent_leaf_size = kwargs.get("pynndescent_leaf_size", 24)
+        self.pynndescent_pruning_degree_multiplier = kwargs.get(
+            "pynndescent_pruning_degree_multiplier", 1.0)
+        self.pynndescent_diversify_prob = kwargs.get("pynndescent_diversify_prob", 1.0)
+        self.pynndescent_n_search_trees = kwargs.get("pynndescent_n_search_trees", 1)
+        self.pynndescent_search_epsilon = kwargs.get("pynndescent_search_epsilon", 0.1)
 
     def compute_knns(self, X):
-        """Computes approximate distances and k-nearest neighbors."""
-        assert X.shape[0] == 1, \
-            "Vector backends can handle univariate data, only."
+        """Compute approximate k-nearest neighbors with exact post-processing.
+
+        Parameters
+        ----------
+        X : np.ndarray
+            Univariate time series with shape ``(1, n)`` or a flattenable
+            one-dimensional array.
+
+        Returns
+        -------
+        tuple
+            ``(D_exact, knns_exact, index_create_time, index_search_time,
+            post_process_time, memory_usage)`` where ``D_exact`` contains exact
+            z-normalized distances for the post-processed neighbors and
+            ``knns_exact`` contains original subsequence offsets. Missing
+            neighbors are encoded as ``-1`` with distance ``np.inf``.
+
+        Notes
+        -----
+        FAISS is retried with candidate shortlist radii ``r``, ``2r``, and
+        ``4r`` when exclusion-zone post-processing finds zero complete rows.
+        The retry stops early as soon as at least one row has all ``k`` valid
+        neighbors.
+        """
+        if X.shape[0] != 1:
+            raise ValueError("Vector backends can handle univariate data, only.")
 
         # Set the number of threads for Numba
         self.previous_jobs = get_num_threads()
         set_num_threads(self.n_jobs)
 
-        pid = os.getpid()
-        self.process = psutil.Process(pid)
+        try:
+            pid = os.getpid()
+            self.process = psutil.Process(pid)
 
-        if X.ndim > 1:
-            X = X.flatten()
+            if X.ndim > 1:
+                X = X.flatten()
 
-        X_windows = znorm_windows(X, self.m)
+            X_windows = znorm_windows(X, self.m)
 
-        # We must shuffle
-        np.random.seed(42)
-        np.random.shuffle(X_windows)
+            # We must shuffle
+            np.random.seed(42)
+            permutation = np.arange(len(X_windows), dtype=np.int32)
+            np.random.shuffle(permutation)
+            X_windows = X_windows[permutation]
 
-        if self.index_strategy == "faiss":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_faiss(X_windows)
+            post_process_time = None
 
-        elif self.index_strategy == "annoy":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_annoy(X_windows)
+            if self.index_strategy == "faiss":
+                original_search_radius = self.search_radius
+                original_ef_search = self.efSearch
+                attempts = [
+                    original_search_radius,
+                    original_search_radius * 2,
+                    original_search_radius * 4
+                ]
+                index_create_time = 0.0
+                index_search_time = 0.0
+                memory_usage = 0.0
+                post_process_time = time.time()
 
-        elif self.index_strategy == "pynndescent":
-            D, index_create_time, index_search_time, knns, memory_usage \
-                = self.process_pynndescent(X_windows)
+                if self.verbose:
+                    print("    Applying exclusion zone")
 
-        else:
-            raise ValueError(
-                f"Unknown indexing strategy: {index_strategy}. "
-                f"Available strategies: {index_strategies}"
+                try:
+                    for attempt, search_radius in enumerate(attempts):
+                        self.search_radius = search_radius
+                        self.efSearch = max(self.efSearch, self.search_radius * self.k)
+
+                        D, create_time, search_time, knns, attempt_memory \
+                            = self.process_faiss(X_windows)
+                        D, knns = restore_original_indices(D, knns, permutation)
+                        D_exact, knns_exact = apply_exclusion_zone(
+                            X,
+                            self.m,
+                            D,
+                            knns,
+                            self.k,
+                            slack=self.slack
+                        )
+                        complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+                        index_create_time += create_time
+                        index_search_time += search_time
+                        memory_usage = max(memory_usage, attempt_memory)
+
+                        if complete_rows > 0 or attempt == len(attempts) - 1:
+                            break
+
+                        if self.verbose:
+                            print(
+                                "    No complete neighbor rows found; retrying FAISS "
+                                f"with search_radius={attempts[attempt + 1]}"
+                            )
+                finally:
+                    self.search_radius = original_search_radius
+                    self.efSearch = original_ef_search
+
+            elif self.index_strategy == "annoy":
+                D, index_create_time, index_search_time, knns, memory_usage \
+                    = self.process_annoy(X_windows)
+
+            elif self.index_strategy == "pynndescent":
+                D, index_create_time, index_search_time, knns, memory_usage \
+                    = self.process_pynndescent(X_windows)
+
+            else:
+                raise ValueError(
+                    f"Unknown indexing strategy: {self.index_strategy}. "
+                    f"Available strategies: {index_strategies}"
+                )
+
+            if self.index_strategy != "faiss":
+                # Post-process the results to filter out distances and neighbors
+                post_process_time = time.time()
+
+                if self.verbose:
+                    print("    Applying exclusion zone")
+
+                D, knns = restore_original_indices(D, knns, permutation)
+                D_exact, knns_exact = apply_exclusion_zone(
+                    X,
+                    self.m,  # :window_size
+                    D,
+                    knns,
+                    self.k,
+                    slack=self.slack
+                )
+                complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+            if self.verbose:
+                print(f"    First neighbors: {knns_exact[0]}")
+                print(f"    Last neighbors:  {knns_exact[-1]}")
+                print(
+                    f"    Complete neighbor rows: "
+                    f"{complete_rows}/{len(knns_exact)}"
+                )
+
+            post_process_time = time.time() - post_process_time
+            # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
+
+            print(
+                f"    Vector search time: create={index_create_time:.3f}s "
+                f"search={index_search_time:.3f}s "
+                f"post_process={post_process_time:.3f}s"
             )
 
-        # Post-process the results to filter out distances and neighbors
-        post_process_time = time.time()
+            return (D_exact, knns_exact, index_create_time,
+                    index_search_time, post_process_time, memory_usage)
 
-        if self.verbose:
-            print(f"\tApplying exclusion Zone")
-            #print("\t", knns[0])
-            #print("\t", knns[-1])
-
-        D_exact, knns_exact = apply_exclusion_zone(
-            X,
-            self.m,  # :window_size
-            D,
-            knns,
-            self.k,
-            slack=self.slack
-        )
-
-        if self.verbose:
-            print("\t", knns_exact[0])
-            print("\t", knns_exact[-1])
-
-        post_process_time = time.time() - post_process_time
-        # print(f"\tPost-processing took {post_process_time:.3f} seconds.")
-
-        # Set old values
-        set_num_threads(self.previous_jobs)
-
-        print(f"Total time: "
-              f"\n\tCreate: {index_create_time:.3f}s "
-              f"\n\tSearch: {index_search_time:.3f}s "
-              f"\n\tPost Process: {post_process_time:.3f}s.")
-
-        return (D_exact, knns_exact, index_create_time,
-                index_search_time, post_process_time, memory_usage)
+        finally:
+            set_num_threads(self.previous_jobs)
 
     def process_annoy(self, X_windows):
+        """Build and query an Annoy index on shuffled z-normalized windows."""
         import annoy
 
         d = X_windows.shape[-1]
@@ -189,13 +319,12 @@ class VectorSearchNearestNeighbors:
         index_create_time = time.time() - index_create_time
 
         index_search_time = time.time()
-        # FIXME: no method to query multiple samples at the same time
-        #        thus, too slow
+        # no method to query multiple samples at the same time
         knns = np.zeros((len(X_windows), self.k), dtype=np.int32)
         D = np.zeros((len(X_windows), self.k), dtype=np.float32)
         for i, X in enumerate(X_windows):
             knns[i], D[i] = index.get_nns_by_vector(
-                X_windows, self.k, self.annoy_search_k, include_distances=True)
+                X, self.k, self.annoy_search_k, include_distances=True)
 
         index_search_time = time.time() - index_search_time
 
@@ -205,6 +334,7 @@ class VectorSearchNearestNeighbors:
         return D, index_create_time, index_search_time, knns, memory_usage
 
     def process_pynndescent(self, X_windows):
+        """Build NNDescent and return its neighbor graph for the windows."""
         import pynndescent
 
         # https://pynndescent.readthedocs.io/en/latest/api.html
@@ -247,9 +377,16 @@ class VectorSearchNearestNeighbors:
         return D, index_create_time, index_search_time, knns, memory_usage
 
     def process_faiss(self, X_windows):
+        """Build and query the configured FAISS index.
+
+        The query count is ``self.search_radius * self.k``. Returned neighbor
+        indices refer to the shuffled window order and must be restored by
+        ``restore_original_indices`` before motiflet post-processing.
+        """
 
         import faiss
         faiss.omp_set_num_threads(self.n_jobs)
+        X_windows = np.ascontiguousarray(X_windows, dtype=np.float32)
 
         # Compute distances using the lower bounding representation
         index_create_time = time.time()
@@ -263,8 +400,8 @@ class VectorSearchNearestNeighbors:
 
                 # number of neighbours we add to each vertex
                 if self.verbose:
-                    print(f"\tLSH")
-                    print(f"\tnBits:       {n_bits}")
+                    print(
+                        f"    FAISS LSH: nBits={n_bits} search_radius={self.search_radius}")
 
                 index = faiss.IndexLSH(d, n_bits)
 
@@ -273,10 +410,12 @@ class VectorSearchNearestNeighbors:
 
                 # number of neighbours we add to each vertex
                 if self.verbose:
-                    print(f"\tHNSW")
-                    print(f"\tefSearch:       {self.efSearch}")
-                    print(f"\tefConstruction: {self.efConstruction}")
-                    print(f"\tM:              {self.M}")
+                    print(
+                        f"    FAISS HNSW: M={self.M} "
+                        f"efConstruction={self.efConstruction} "
+                        f"efSearch={self.efSearch} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 index = faiss.IndexHNSWFlat(d, self.M)
                 index.hnsw.efConstruction = self.efConstruction
@@ -290,9 +429,11 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVF")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
+                    print(
+                        f"    FAISS IVF: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} "
+                        f"search_radius={self.search_radius}"
+                    )
 
                 quantizer = faiss.IndexFlatL2(d)
                 index = faiss.IndexIVFFlat(quantizer, d, self.nlist, faiss.METRIC_L2)
@@ -308,12 +449,15 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVFPQ")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
+                    print(
+                        f"    FAISS IVFPQ: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} "
+                        f"search_radius={self.search_radius}"
+                    )
 
-                mm = 64  # d // 32  # Use 1/32 dimension for PQ
-                nbits = 8  # bits per Subvector
+                mm, nbits = self._faiss_pq_params(d)
+                if self.verbose:
+                    print(f"    PQ: m={mm} bits={nbits}")
 
                 factory_string = f"IVF{int(self.nlist)},PQ{mm}x{nbits}"
                 index = faiss.index_factory(d, factory_string, faiss.METRIC_L2)
@@ -329,24 +473,26 @@ class VectorSearchNearestNeighbors:
                     self.nlist = int(np.sqrt(X_windows.shape[0]))
 
                 if self.verbose:
-                    print(f"\tIVFPQ+HNSW")
-                    print(f"\tnlist:  {self.nlist}")
-                    print(f"\tnprobe: {self.nprobe}")
-                    print(f"\tefSearch:       {self.efSearch}")
-                    print(f"\tefConstruction: {self.efConstruction}")
-                    print(f"\tM:      {self.M}")
+                    print(
+                        f"    FAISS IVFPQ+HNSW: nlist={self.nlist} "
+                        f"nprobe={self.nprobe} M={self.M} "
+                        f"efConstruction={self.efConstruction} "
+                        f"efSearch={self.efSearch} "
+                        f"search_radius={self.search_radius}"
+                    )
 
-                mm = 64  # d // 32  # Use 1/32 dimension for PQ
-                nbits = 8  # bits per Subvector
+                mm, nbits = self._faiss_pq_params(d)
+                if self.verbose:
+                    print(f"    PQ: m={mm} bits={nbits}")
 
                 # The coarse quantizer is responsible for finding the partition
                 # centroids that are nearest to the query vector so that vector search
                 # only needs to be performed on those partitions.
-                quantizer = faiss.IndexHNSWFlat(D, self.M)
+                quantizer = faiss.IndexHNSWFlat(d, self.M)
                 quantizer.hnsw.efConstruction = self.efConstruction
                 quantizer.hnsw.efSearch = self.efSearch
 
-                index = faiss.IndexIVFPQ(quantizer, D, self.nlist, mm, nbits,
+                index = faiss.IndexIVFPQ(quantizer, d, self.nlist, mm, nbits,
                                          faiss.METRIC_L2)
 
                 index.train(X_windows)
@@ -354,7 +500,7 @@ class VectorSearchNearestNeighbors:
 
             else:
                 raise ValueError(
-                    'Unknown FAISS index' + faiss_index + '.' +
+                    'Unknown FAISS index' + self.faiss_index + '.' +
                     'Use "HNSW", "IVF", "IVFPQ", "LSH".')
         else:
             raise ValueError(
@@ -383,9 +529,26 @@ class VectorSearchNearestNeighbors:
 
         return D, index_create_time, index_search_time, knns, memory_usage
 
+    def _faiss_pq_params(self, d):
+        """Return valid FAISS product-quantizer parameters for dimension ``d``."""
+        nbits = int(self.pq_nbits)
+        if self.pq_m is not None:
+            mm = int(self.pq_m)
+            if d % mm != 0:
+                raise ValueError(
+                    f"faiss_pq_m={mm} must divide vector dimension {d}."
+                )
+            return mm, nbits
+
+        mm = min(64, d)
+        while d % mm != 0:
+            mm -= 1
+        return mm, nbits
+
 
 @njit(fastmath=True, cache=True)
 def make_windows(X, window_size, n_chunks, chunk_size):
+    """Create fixed-size windows by stepping through ``X`` in chunks."""
     X_windows = np.full((n_chunks, window_size), np.inf, dtype=X.dtype)
     for i in range(n_chunks):
         start = i * chunk_size
@@ -394,7 +557,7 @@ def make_windows(X, window_size, n_chunks, chunk_size):
 
 
 def znorm_windows(X, window_size):
-    # Apply windowing to the data, and z-normalize it
+    """Return all sliding windows of ``X`` z-normalized by window statistics."""
     num_inst = X.shape[0] - window_size + 1
     X_windows = X[np.arange(window_size)[None, :] + np.arange(num_inst)[:, None]]
 
@@ -404,12 +567,50 @@ def znorm_windows(X, window_size):
     return X_lb
 
 
+@njit(cache=True)
+def restore_original_indices(D_shuffled, knns_shuffled, permutation):
+    """Map distances and neighbor indices from shuffled to original order."""
+    D = np.empty_like(D_shuffled)
+    knns = np.full(knns_shuffled.shape, -1, dtype=knns_shuffled.dtype)
+
+    for shuffled_row in range(len(permutation)):
+        original_row = permutation[shuffled_row]
+        D[original_row] = D_shuffled[shuffled_row]
+
+        for i in range(knns_shuffled.shape[1]):
+            shuffled_neighbor = knns_shuffled[shuffled_row, i]
+            if shuffled_neighbor >= 0:
+                knns[original_row, i] = permutation[shuffled_neighbor]
+
+    return D, knns
+
+
 # FIXME: adding fastmath=True breaks the code???
 @njit(cache=True, parallel=True)
 def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
-    """Go through the list of knns, any apply the exclusion zone.
+    """Apply motiflet exclusion-zone filtering to approximate neighbor lists.
 
-    Returns the knns to each offset with exclusion applied
+    Parameters
+    ----------
+    X : np.ndarray
+        Original one-dimensional time series.
+    m : int
+        Motif length.
+    D_lb : np.ndarray
+        Approximate/lower-bound distances for each query row.
+    knns_lb : np.ndarray
+        Candidate neighbor offsets for each query row.
+    k : int
+        Number of valid non-overlapping neighbors to keep.
+    slack : float, default=0.5
+        Exclusion-zone factor around accepted neighbors.
+
+    Returns
+    -------
+    tuple
+        ``(D, knns)`` with exact z-normalized distances and filtered neighbor
+        offsets. Rows that cannot be filled keep ``-1`` positions and
+        ``np.inf`` distances.
     """
     # compute size of the exclusion zone
     means, stds = sliding_mean_std(X, m)
@@ -423,11 +624,9 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
     # The knns_lb - list can be overlapping, Thus apply slack (exclusion zone)
     # to take top-k neighbors
     for order in prange(n):
-        dists = np.full(n, np.inf, dtype=np.float64)
-        dists[knns_lb[order]] = D_lb[order]
-
         dist_pos = knns_lb[order]
-        dist_sort = D_lb[order]
+        dist_sort = np.copy(D_lb[order])
+        excluded = np.zeros(n, dtype=np.bool_)
 
         # top-k counter
         k_idx = 0
@@ -440,14 +639,15 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
 
             # check if the position is not within some exclusion zone to a previously
             # chosen index
-            if ((dists[pos] != np.inf) and
-                    (not np.isnan(dists[pos])) and
-                    (not np.isinf(dists[pos]))):
+            if (pos >= 0 and pos < n and
+                    (not excluded[pos]) and
+                    (not np.isnan(d)) and
+                    (not np.isinf(d))):
                 D_knn[order, k_idx] = d
                 knns[order, k_idx] = np.int32(pos)
 
                 # exclude all trivial matches and itself
-                dists[max(0, pos - halve_m): min(pos + halve_m, len(dists))] = np.inf
+                excluded[max(0, pos - halve_m): min(pos + halve_m, n)] = True
                 k_idx += 1
 
             # We found the top-k elements
@@ -458,7 +658,7 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
     for i in prange(len(knns)):
         query = X[i:i + m]
         knn = knns[i]
-        for a in prange(1, len(knn)):
+        for a in range(len(knn)):
             j = knn[a]
             if j > -1:
                 # Re-rank based on z-normalized Euclidean distance
