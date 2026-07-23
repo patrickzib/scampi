@@ -14,6 +14,10 @@ Run selected datasets and motif lengths:
         --lengths 512,1024 \
         --radius-mode r2
 
+Run LatentMotif and store raw, unrefined motifs:
+    python benchmarks/cli/run_momp_benchmarks_latentmotifs.py \
+        --no-exact-refine
+
 Run against a specific server data directory:
     python benchmarks/cli/run_momp_benchmarks_latentmotifs.py \
         --data-path /vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp \
@@ -90,6 +94,16 @@ def parse_args():
     parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument("--n-starts", type=int, default=10)
     parser.add_argument(
+        "--exact-refine",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Refine LatentMotif seed positions with exact k-NN distances and "
+            "store the optimized motiflet/extent. Enabled by default; use "
+            "--no-exact-refine to store the raw LatentMotif motif set."
+        ),
+    )
+    parser.add_argument(
         "--radius-mode",
         choices=RADIUS_MODES,
         default="2r",
@@ -133,6 +147,12 @@ def default_output_dir(radius_mode):
     return RESULTS_DIR / f"latentmotifs_{radius_mode}"
 
 
+def output_dir(args):
+    if args.output_dir is not None:
+        return args.output_dir
+    return default_output_dir(args.radius_mode)
+
+
 def radius_from_reference(reference_extent, args):
     radius_base = reference_extent + args.radius_epsilon
     if args.radius_mode == "2r":
@@ -154,6 +174,16 @@ def local_length(series, local_n, run_local):
 
 def output_filename(output_dir, ds_name, k_max):
     return output_dir / f"scalability_n_{ds_name}_{k_max}_latentmotifs.csv"
+
+
+def backend_label(args):
+    label = (
+        f"LatentMotif radius_mode={args.radius_mode} "
+        f"radius_factor={args.radius_factor}"
+    )
+    if args.exact_refine:
+        label = f"{label} exact_refine"
+    return label
 
 
 def reference_filename(reference_dir, ds_name, k_max):
@@ -267,15 +297,27 @@ def run_latentmotif(ds_name, series, lengths, args, local_n, run_local):
             n_starts=args.n_starts,
         )
         lm.fit(ts)
-        duration = time.time() - start
-
-        memory_usage = process.memory_info().rss / (1024 * 1024)
         motif_set = np.array(lm.prediction_mask_[1])[0]
 
         print(f"    Patterns: {lm.patterns_.shape[0]}")
         print(f"    Locations: {motif_set.shape[0]}")
 
-        extent = compute_extent(ts, motif_set, motif_length)
+        if args.exact_refine:
+            from benchmarks.converters.utils import ConverterUtils
+
+            motif_set, extent = ConverterUtils.exact_refine_from_seeds(
+                ts,
+                motif_set.astype(np.int32),
+                motif_length,
+                args.k_max,
+            )
+            duration = time.time() - start
+            memory_usage = process.memory_info().rss / (1024 * 1024)
+        else:
+            duration = time.time() - start
+            memory_usage = process.memory_info().rss / (1024 * 1024)
+            extent = compute_extent(ts, motif_set, motif_length)
+
         print(
             f"    Completed in {duration:0.2f}s "
             f"memory={memory_usage:0.2f}MB extent={extent}"
@@ -285,8 +327,7 @@ def run_latentmotif(ds_name, series, lengths, args, local_n, run_local):
         current = [
             ts.shape[-1],
             motif_length,
-            (f"LatentMotif radius_mode={args.radius_mode} "
-             f"radius_factor={args.radius_factor}"),
+            backend_label(args),
             duration,
             memory_usage,
             float(extent),
@@ -308,8 +349,7 @@ def main():
         print("\n".join(RADIUS_MODES))
         return
 
-    if args.output_dir is None:
-        args.output_dir = default_output_dir(args.radius_mode)
+    args.output_dir = output_dir(args)
 
     from benchmarks import utils as ut
 
