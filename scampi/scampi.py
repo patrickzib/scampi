@@ -9,28 +9,39 @@ import os
 import logging
 from ast import literal_eval
 from os.path import exists
+from pathlib import Path
 
 os.environ["RUST_LOG"] = "error"
 logging.basicConfig(level=logging.CRITICAL)
 pyattimo_logger = logging.getLogger('pyattimo')
 pyattimo_logger.setLevel(logging.CRITICAL)
 
-import math
-
 import pandas as pd
-
-from matplotlib import pyplot as plt
 
 from numba import objmode
 from numba.typed import Dict, List
+from scipy.fft import irfft, next_fast_len, rfft
 from scipy.signal import argrelextrema
 from scipy.stats import zscore
 
-import scampi.plotting as pl
 from scampi.knn_vector_backend import *
 from scampi.knn_scampi_backend import *
 from scampi.distances import *
 from scampi.maxheap import MaxHeap
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_dataset_path(*parts):
+    legacy_path = Path("..", "datasets", *parts)
+    if legacy_path.exists():
+        return legacy_path
+    return _PROJECT_ROOT / "datasets" / Path(*parts)
+
+
+def _plotting():
+    from scampi import plotting
+    return plotting
 
 
 class SCAMPI:
@@ -173,7 +184,8 @@ class SCAMPI:
                 **self.kwargs)
 
         if plot:
-            pl.plot_window_lengths(self.ds_name, au_ef, header, motif_length_range)
+            _plotting().plot_window_lengths(
+                self.ds_name, au_ef, header, motif_length_range)
 
         return self.motif_length
 
@@ -252,13 +264,14 @@ class SCAMPI:
             **self.kwargs)
 
         if plot_elbows:
-            pl._plot_elbow_points(
+            _plotting()._plot_elbow_points(
                 self.ds_name, raw_data, motif_length,
                 self.elbow_points, self.motiflets, self.dists)
 
         if plot_motifs_as_grid:
+            plotting = _plotting()
             if data.shape[0] == 1:
-                pl.plot_grid_motiflets(
+                plotting.plot_grid_motiflets(
                     self.ds_name,
                     raw_data,
                     self.motiflets,
@@ -271,10 +284,14 @@ class SCAMPI:
                     font_size=24,
                     ground_truth=plot_ground_truth)
             else:
-                pl.plot_motifset(
+                elbow_points = self.elbow_points[0]
+                motifsets = None
+                if len(elbow_points) > 0:
+                    motifsets = self.motiflets[elbow_points][0]
+                plotting.plot_motifset(
                     self.ds_name,
                     data,
-                    motifsets=candidates[elbows[0]][0],
+                    motifsets=motifsets,
                     motif_length=motif_length,
                     ground_truth=plot_ground_truth,
                     show=True)
@@ -282,7 +299,8 @@ class SCAMPI:
         return self.dists, self.motiflets, self.elbow_points
 
     def plot_dataset(self, max_points=10_000, path=None):
-        fig, ax = pl.plot_dataset(
+        plotting = _plotting()
+        fig, ax = plotting.plot_dataset(
             self.ds_name,
             self.series,
             max_points=max_points,
@@ -290,8 +308,8 @@ class SCAMPI:
             ground_truth=self.ground_truth)
 
         if path is not None:
-            plt.savefig(path)
-            plt.show()
+            fig.savefig(path)
+            fig.show()
 
         return fig, ax
 
@@ -304,7 +322,8 @@ class SCAMPI:
         if elbow_point is None:
             elbow_point = self.elbow_points[0][-1]
 
-        fig, ax = pl.plot_motifset(
+        plotting = _plotting()
+        fig, ax = plotting.plot_motifset(
             self.ds_name,
             self.series,
             max_points=max_points,
@@ -313,8 +332,8 @@ class SCAMPI:
             show=path is None)
 
         if path is not None:
-            plt.savefig(path)
-            plt.show()
+            fig.savefig(path)
+            fig.show()
 
         return fig, ax
 
@@ -398,7 +417,11 @@ def convert_to_2d(
 
 def flatten_elbows(elbow_points, candidates, dists, max_items=None):
     if not isinstance(elbow_points, list):
-        return elbow_points, candidates, dists
+        return (
+            np.array(dists, dtype=np.float64),
+            np.array(candidates, dtype=object),
+            np.array(elbow_points, dtype=np.int32),
+        )
 
     items = []
     for rank in range(len(elbow_points)):
@@ -456,7 +479,8 @@ def read_ground_truth(dataset):
         A series of ground-truth data
 
     """
-    file = '../datasets/ground_truth/' + dataset.split(".")[0] + "_gt.csv"
+    file = _resolve_dataset_path(
+        "ground_truth", dataset.split(".")[0] + "_gt.csv")
     if exists(file):
         print(file)
         series = pd.read_csv(file, index_col=0)
@@ -488,7 +512,7 @@ def read_dataset_with_index(dataset, sampling_factor=10000):
             Ground-truth, if available as `dataset`_gt file
 
     """
-    full_path = '../datasets/ground_truth/' + dataset
+    full_path = _resolve_dataset_path("ground_truth", dataset)
     data = pd.read_csv(full_path, index_col=0).squeeze('columns')
     print("Dataset Original Length n: ", len(data))
 
@@ -559,7 +583,7 @@ def read_dataset(dataset, sampling_factor=10000):
         The time series with z-score applied.
 
     """
-    full_path = '../datasets/' + dataset
+    full_path = _resolve_dataset_path(dataset)
     data = pd.read_csv(full_path).T
     data = np.array(data)[0]
     print("Dataset Original Length n: ", len(data))
@@ -592,26 +616,32 @@ def _sliding_dot_product(query, time_series):
     if m > n:
         raise ValueError("query longer than time_series")
 
-    # Reverse query for cross-correlation and cast to float64
+    # Reverse query for cross-correlation.
     q_rev = query[::-1]
-    t = time_series
-
-    # Next power-of-two ≥ n + m  (good for FFT speed)
-    total = n + m
-    exponent = math.ceil(math.log2(total))
-
-    L = 1 << exponent
-    q_pad = np.concatenate((q_rev, np.zeros(L - m, dtype=q_rev.dtype)))
-    t_pad = np.concatenate((t, np.zeros(L - n, dtype=t.dtype)))
 
     with objmode(conv='float64[:]'):
-        conv = np.fft.irfft(np.fft.rfft(q_pad) * np.fft.rfft(t_pad))
+        fft_length = next_fast_len(n + m - 1, real=True)
+        conv = irfft(rfft(q_rev, fft_length) * rfft(time_series, fft_length),
+                     fft_length)
 
     # Trim to the valid sliding-dot range
     return conv[m - 1: n]
 
 
-@njit(nogil=True, cache=True, parallel=True)
+@njit(fastmath=True, cache=True, inline='always')
+def _update_sliding_dot_product(dot_rolled, dot_first_order, ts, order, m, n):
+    add = ts[order + m - 1]
+    remove = ts[order - 1]
+
+    dot_rolled[1:] = (
+            dot_rolled[:-1]
+            + add * ts[m:n + m - 1]
+            - remove * ts[:n - 1]
+    )
+    dot_rolled[0] = dot_first_order
+
+
+@njit(cache=True, parallel=True)
 def compute_distances_with_knns_full(
         time_series,
         m,
@@ -674,34 +704,30 @@ def compute_distances_with_knns_full(
     D = np.zeros((n, n), dtype=np.float64)
     knns = np.full((n, k), -1, dtype=np.int32)
 
-    bin_size = np.int32(np.ceil(time_series.shape[-1] / n_jobs))
+    bin_size = np.int32(np.ceil(n / n_jobs))
 
     for idx in prange(n_jobs):
         start = idx * bin_size
         end = min(start + bin_size, n)
 
-        for d in np.arange(dims):
+        for d in range(dims):
             ts = time_series[d]
             preprocessing = distance_preprocessing(ts, m)
             dot_first = _sliding_dot_product(ts[:m], ts)
 
-            dot_prev = None
-            for order in np.arange(start, end):
+            for order in range(start, end):
                 if order == start:
                     # O(n log n) operation
                     dot_rolled = _sliding_dot_product(ts[start:start + m], ts)
                 else:
-                    # constant time O(1) operations
-                    dot_rolled = np.roll(dot_prev, 1) \
-                                 + ts[order + m - 1] * ts[m - 1:n + m] \
-                                 - ts[order - 1] * np.roll(ts[:n], 1)
-                    dot_rolled[0] = dot_first[order]
+                    # constant time O(n) operations
+                    _update_sliding_dot_product(
+                        dot_rolled, dot_first[order], ts, order, m, n)
 
                 dist = distance(dot_rolled, n, m, preprocessing, order, halve_m)
                 D[order] += dist
-                dot_prev = dot_rolled
 
-        for order in np.arange(start, end):
+        for order in range(start, end):
             knn = _argknn(D[order], k, m, slack=slack)
             knns[order, :len(knn)] = knn
 
@@ -737,7 +763,7 @@ def compute_upper_bound(
     return kth_extent
 
 
-@njit(nogil=True, cache=True, parallel=True)
+@njit(cache=True, parallel=True)
 def compute_distances_with_knns(
         time_series,
         m,
@@ -801,12 +827,12 @@ def compute_distances_with_knns(
     D_knn = np.zeros((n, k), dtype=np.float64)
     knns = np.full((n, k), -1, dtype=np.int32)
 
-    bin_size = np.int32(np.ceil(time_series.shape[-1] / n_jobs))
+    bin_size = np.int32(np.ceil(n / n_jobs))
 
     preprocessing = []
     dot_first = []
 
-    for d in np.arange(dims):
+    for d in range(dims):
         ts = time_series[d]
         preprocessing.append(distance_preprocessing(ts, m))
         dot_first.append(_sliding_dot_product(ts[:m], ts))
@@ -814,29 +840,25 @@ def compute_distances_with_knns(
     # first pass, computing the k-nns
     for idx in prange(n_jobs):
         dot_rolled = np.zeros((dims, n), dtype=np.float64)
-        dot_prev = np.zeros((dims, n), dtype=np.float64)
 
         start = np.int32(idx * bin_size)
         end = np.int32(min(start + bin_size, n))
 
-        for order in np.arange(start, end, ):
+        for order in range(start, end):
             dist = np.zeros(n, dtype=np.float64)
-            for d in np.arange(dims):
+            for d in range(dims):
                 ts = time_series[d, :]
                 if order == start:
                     # O(n log n) operation
                     dot_rolled[d] = _sliding_dot_product(ts[start:start + m], ts)
                 else:
-                    # constant time O(1) operations
-                    dot_rolled[d] = np.roll(dot_prev[d], 1) \
-                                    + ts[order + m - 1] * ts[m - 1:n + m] \
-                                    - ts[order - 1] * np.roll(ts[:n], 1)
-                    dot_rolled[d][0] = dot_first[d][order]
+                    # constant time O(n) operations
+                    _update_sliding_dot_product(
+                        dot_rolled[d], dot_first[d][order], ts, order, m, n)
 
                 dists = distance(dot_rolled[d], n, m, preprocessing[d], order, halve_m)
                 for i in range(len(dists)):
                     dist[i] += dists[i]
-                dot_prev[d] = dot_rolled[d]
 
             knn = _argknn(dist, k, m, slack=slack)
             D_knn[order, :len(knn)] = dist[knn]
@@ -866,8 +888,8 @@ def get_radius(D_full, motifset_pos):
     for ii in range(len(motifset_pos) - 1):
         i = motifset_pos[ii]
         current = np.float64(0.0)
-        for jj in range(1, len(motifset_pos)):
-            if i != jj:
+        for jj in range(0, len(motifset_pos)):
+            if ii != jj:
                 j = motifset_pos[jj]
                 current = max(current, D_full[i, j])
         motiflet_radius = min(current, motiflet_radius)
@@ -875,7 +897,7 @@ def get_radius(D_full, motifset_pos):
     return motiflet_radius
 
 
-@njit(fastmath=True, cache=True, nogil=True)
+@njit(fastmath=True, cache=True)
 def get_pairwise_extent(D_full, motifset_pos, upperbound=np.inf):
     """Computes the extent of the motifset using pre-computed distances.
 
@@ -914,7 +936,7 @@ def get_pairwise_extent(D_full, motifset_pos, upperbound=np.inf):
     return motifset_extent
 
 
-@njit(cache=True, nogil=True)
+@njit(cache=True)
 def get_pairwise_extent_raw(
         series, motifset_pos, motif_length,
         distance_single, preprocessing, upperbound=np.inf):
@@ -1030,7 +1052,7 @@ def _argknn(
     return np.array(idx, dtype=np.int32)
 
 
-@njit(cache=True, nogil=True)
+@njit(cache=True)
 def get_approximate_k_motiflet(
         ts, m, k, D, knns,
         distance_single=None,
@@ -1378,7 +1400,7 @@ def find_au_ef_motif_length(
     # TODO parallelize?
     for i, m in enumerate(motif_length_range[::-1]):
         m_sub = m // subsample
-        if m_sub < data.shape[-1] and m_sub >= 2:
+        if data.shape[-1] > m_sub >= 2:
             dist, candidates, elbow_points, _, memory_usage = search_k_motiflets_elbow(
                 k_max,
                 data,
@@ -1391,7 +1413,7 @@ def find_au_ef_motif_length(
                 distance_preprocessing=distance_preprocessing,
                 backend=backend,
                 top_N=1,
-                kwargs=kwargs)
+                **kwargs)
 
             # flatten the data types
             dist = dist.squeeze(1)
@@ -1517,148 +1539,147 @@ def search_k_motiflets_elbow(
     previous_jobs = get_num_threads()
     set_num_threads(n_jobs)
 
-    # convert to 2d array
-    _, data_raw = pd_series_to_numpy(data)
+    try:
+        # convert to 2d array
+        _, data_raw = pd_series_to_numpy(data)
 
-    # auto motif size selection
-    if motif_length == 'AU_EF' or motif_length == 'auto':
-        if motif_length_range is None:
-            print("Warning: no valid motiflet range set")
-            assert False
-        m, _, _, _, _, _ = find_au_ef_motif_length(
-            data, k_max, motif_length_range,
-            n_jobs=n_jobs,
-            elbow_deviation=elbow_deviation,
-            slack=slack,
-            backend=backend,
-            **kwargs)
-        m = np.int32(m)
-    elif isinstance(motif_length, int) or \
-            isinstance(motif_length, np.int32) or \
-            isinstance(motif_length, np.int64):
-        m = motif_length
-    else:
-        print("Warning: no valid motif_length set - use 'auto' for automatic selection")
-        assert False
-
-    pid = os.getpid()
-    process = psutil.Process(pid)
-
-    if m <= 0:
-        raise ValueError("motif_length must be > 0")
-    if slack <= 0:
-        raise ValueError("slack must be > 0")
-
-    # non-overlapping motifs only
-    n = data_raw.shape[-1] - m + 1
-    k_max_ = max(3, min(int(n // (m * slack)), k_max))
-
-    # non-overlapping motifs only
-    k_motiflet_distances = np.full((k_max_, top_N), np.inf, dtype=np.float64)
-    k_motiflet_candidates = np.empty(k_max_, dtype=object)
-
-    if backend in ["faiss", "annoy", "pynndescent",
-                   "scampi", "default", "scalable"]:
-
-        backend = check_valid_backend(backend, data_raw, n)
-
-        # print(f"Using backend: {backend} for k-Motiflet search with motif length: {m}")
-        # print(f"Jobs used: {n_jobs}")
-
-        if backend == "scampi":
-            backend_imlp = SCAMPINearestNeighbors(
-                m, k_max_,
-                top_k=top_N,
+        # auto motif size selection
+        if motif_length == 'AU_EF' or motif_length == 'auto':
+            if motif_length_range is None:
+                raise ValueError("No valid motiflet range set")
+            m, _, _, _, _, _ = find_au_ef_motif_length(
+                data, k_max, motif_length_range,
+                n_jobs=n_jobs,
+                elbow_deviation=elbow_deviation,
                 slack=slack,
+                backend=backend,
                 **kwargs)
-
-            k_motiflet_distances, k_motiflet_candidates, memory_usage \
-                = backend_imlp.compute_knns(data_raw)
-
+            m = np.int32(m)
+        elif isinstance(motif_length, int) or \
+                isinstance(motif_length, np.int32) or \
+                isinstance(motif_length, np.int64):
+            m = motif_length
         else:
-            if backend in ["faiss", "pynndescent", "annoy"]:
-                backend_imlp = VectorSearchNearestNeighbors(
-                    m, k_max_,
-                    index_strategy=backend,
-                    search_radius=5,
-                    slack=slack,
-                    n_jobs=n_jobs,
-                    **kwargs
-                )
+            raise ValueError(
+                "No valid motif_length set - use 'auto' for automatic selection")
 
-                (D_full,
-                 knns,
-                 index_create_time,
-                 index_search_time,
-                 post_process_time,
-                 memory_usage) = backend_imlp.compute_knns(data_raw)
+        pid = os.getpid()
+        process = psutil.Process(pid)
+
+        if m <= 0:
+            raise ValueError("motif_length must be > 0")
+        if slack <= 0:
+            raise ValueError("slack must be > 0")
+
+        # non-overlapping motifs only
+        n = data_raw.shape[-1] - m + 1
+        k_max_ = max(3, min(int(n // (m * slack)), k_max))
+
+        # non-overlapping motifs only
+        k_motiflet_distances = np.full((k_max_, top_N), np.inf, dtype=np.float64)
+        k_motiflet_candidates = np.empty(k_max_, dtype=object)
+
+        if backend in ["faiss", "annoy", "pynndescent",
+                       "scampi", "default", "scalable"]:
+
+            backend = check_valid_backend(backend, data_raw, n)
+
+            # print(f"Using backend: {backend} for k-Motiflet search with motif length: {m}")
+            # print(f"Jobs used: {n_jobs}")
+
+            if backend == "scampi":
+                backend_imlp = SCAMPINearestNeighbors(
+                    m, k_max_,
+                    top_k=top_N,
+                    slack=slack,
+                    **kwargs)
+
+                k_motiflet_distances, k_motiflet_candidates, memory_usage \
+                    = backend_imlp.compute_knns(data_raw)
 
             else:
-                if backend == "scalable":
-                    # uses pairwise comparisons to compute the distances
-                    call_to_distances = compute_distances_with_knns
+                if backend in ["faiss", "pynndescent", "annoy"]:
+                    backend_imlp = VectorSearchNearestNeighbors(
+                        m, k_max_,
+                        index_strategy=backend,
+                        slack=slack,
+                        n_jobs=n_jobs,
+                        **kwargs
+                    )
+
+                    (D_full,
+                     knns,
+                     index_create_time,
+                     index_search_time,
+                     post_process_time,
+                     memory_usage) = backend_imlp.compute_knns(data_raw)
+
                 else:
-                    # computes the full matrix
-                    call_to_distances = compute_distances_with_knns_full
+                    if backend == "scalable":
+                        # uses pairwise comparisons to compute the distances
+                        call_to_distances = compute_distances_with_knns
+                    else:
+                        # computes the full matrix
+                        call_to_distances = compute_distances_with_knns_full
 
-                D_full, knns = call_to_distances(
-                    data_raw, m, k_max_,
-                    n_jobs=n_jobs,
-                    slack=slack,
-                    distance=distance,
-                    distance_single=distance_single,
-                    distance_preprocessing=distance_preprocessing
-                )
+                    D_full, knns = call_to_distances(
+                        data_raw, m, k_max_,
+                        n_jobs=n_jobs,
+                        slack=slack,
+                        distance=distance,
+                        distance_single=distance_single,
+                        distance_preprocessing=distance_preprocessing
+                    )
 
-                memory_usage = process.memory_info().rss / (1024 * 1024)  # MB
+                    memory_usage = process.memory_info().rss / (1024 * 1024)  # MB
 
-            preprocessing = compute_preprocessing(data_raw, distance_preprocessing, m)
+                preprocessing = compute_preprocessing(data_raw, distance_preprocessing, m)
 
-            upper_bound = np.inf
-            for test_k in np.arange(k_max_ - 1, 1, -1):
-                candidates, candidate_dists, _ = get_approximate_k_motiflet(
-                    data_raw, m, test_k, D_full, knns,
-                    distance_single=distance_single,
-                    preprocessing=preprocessing,
-                    use_D_full=(backend in ["default"]),
-                    upper_bound=upper_bound,
-                    top_N=top_N,
-                )
-                candidate_dist = candidate_dists[0]
-                k_motiflet_distances[test_k, :len(candidate_dists)] = candidate_dists
-                k_motiflet_candidates[test_k] = candidates
-                upper_bound = min(candidate_dist, upper_bound)
+                upper_bound = np.inf
+                for test_k in np.arange(k_max_ - 1, 1, -1):
+                    candidates, candidate_dists, _ = get_approximate_k_motiflet(
+                        data_raw, m, test_k, D_full, knns,
+                        distance_single=distance_single,
+                        preprocessing=preprocessing,
+                        use_D_full=(backend in ["default"]),
+                        upper_bound=upper_bound,
+                        top_N=top_N,
+                    )
+                    candidate_dist = candidate_dists[0]
+                    k_motiflet_distances[test_k, :len(candidate_dists)] = candidate_dists
+                    k_motiflet_candidates[test_k] = candidates
+                    upper_bound = min(candidate_dist, upper_bound)
 
-            del D_full
-            del knns
-    else:
-        raise ValueError(
-            'Unknown backend: ' + backend + '. ' +
-            'Use "scalable", "faiss", "pynndescent", "annoy", '
-            '"scampi", or "default".')
+                del D_full
+                del knns
+        else:
+            raise ValueError(
+                'Unknown backend: ' + backend + '. ' +
+                'Use "scalable", "faiss", "pynndescent", "annoy", '
+                '"scampi", or "default".')
 
-    # smoothen the line to make it monotonically increasing
-    k_motiflet_distances[0:2] = k_motiflet_distances[2]
-    for i in range(len(k_motiflet_distances) - 1, 2, -1):
-        k_motiflet_distances[i - 1] = (
-            np.minimum(k_motiflet_distances[i], k_motiflet_distances[i - 1]))
+        # smoothen the line to make it monotonically increasing
+        k_motiflet_distances[0:2] = k_motiflet_distances[2]
+        for i in range(len(k_motiflet_distances) - 1, 2, -1):
+            k_motiflet_distances[i - 1] = (
+                np.minimum(k_motiflet_distances[i], k_motiflet_distances[i - 1]))
 
-    elbow_points = []
-    for rank in range(top_N):
-        eb = find_elbow_points(
-            k_motiflet_distances[:, rank], elbow_deviation=elbow_deviation)
+        elbow_points = []
+        for rank in range(top_N):
+            eb = find_elbow_points(
+                k_motiflet_distances[:, rank], elbow_deviation=elbow_deviation)
 
-        if filter:
-            candidates_rank = np.empty(len(k_motiflet_candidates), dtype=object)
-            for e in eb:
-                candidates_rank[e] = k_motiflet_candidates[e][rank]
-            eb = filter_unique(eb, candidates_rank, m)
+            if filter:
+                candidates_rank = np.empty(len(k_motiflet_candidates), dtype=object)
+                for e in eb:
+                    candidates_rank[e] = k_motiflet_candidates[e][rank]
+                eb = filter_unique(eb, candidates_rank, m)
 
-        elbow_points.append(eb)
+            elbow_points.append(eb)
 
-    set_num_threads(previous_jobs)
-
-    return k_motiflet_distances, k_motiflet_candidates, elbow_points, m, memory_usage
+        return k_motiflet_distances, k_motiflet_candidates, elbow_points, m, memory_usage
+    finally:
+        set_num_threads(previous_jobs)
 
 
 def compute_preprocessing(data_raw, distance_preprocessing, m):
