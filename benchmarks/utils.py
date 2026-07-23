@@ -510,15 +510,13 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
 
     if backend == "scampi":
         scampi_delta = force_get("scampi_delta", kwargs)
-        scampi_exact_refine = kwargs.get("scampi_exact_refine", False)
+        scampi_exact_refine = kwargs.get("scampi_exact_refine", True)
         backend_name = f"{backend} (delta={scampi_delta})"
         if scampi_exact_refine:
             backend_name = f"{backend_name} exact_refine"
 
         new_filename = (new_filename +
                         f"_delta_{scampi_delta}")
-        if scampi_exact_refine:
-            new_filename = new_filename + "_exact_refine"
 
     elif backend == "annoy":
         annoy_n_trees = force_get("annoy_n_trees", kwargs)
