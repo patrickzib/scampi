@@ -234,3 +234,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+tests/results/synthetic_stumpy/series-length_runs.jsonl
