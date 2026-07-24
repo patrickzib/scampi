@@ -94,6 +94,15 @@ def parse_args():
     parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument("--n-starts", type=int, default=10)
     parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help=(
+            "Numba thread count for LatentMotif. Use -1 to keep Numba's "
+            "default thread count."
+        ),
+    )
+    parser.add_argument(
         "--exact-refine",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -295,9 +304,10 @@ def run_latentmotif(ds_name, series, lengths, args, local_n, run_local):
             wlen=motif_length,
             radius=radius,
             n_starts=args.n_starts,
+            n_jobs=args.n_jobs,
         )
         lm.fit(ts)
-        motif_set = np.array(lm.prediction_mask_[1])[0]
+        motif_set = np.asarray(lm.prediction_indices_[0], dtype=np.int32)
 
         print(f"    Patterns: {lm.patterns_.shape[0]}")
         print(f"    Locations: {motif_set.shape[0]}")

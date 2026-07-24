@@ -10,6 +10,8 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
+from numba import njit, prange, set_num_threads
+
 
 class LatentMotif(object):
     """LatentMotif algorithm for motif discovery.
@@ -42,7 +44,8 @@ class LatentMotif(object):
 
     def __init__(self, n_patterns: int, wlen: int, radius: float, alpha=1.0,
                  learning_rate=0.1, n_iterations=100, n_starts=1,
-                 verbose=False) -> None:
+                 verbose=False, chunk_size=1024, use_numba=True,
+                 n_jobs=-1) -> None:
 
         self.n_patterns = n_patterns
         self.wlen = wlen
@@ -52,6 +55,39 @@ class LatentMotif(object):
         self.n_iterations = n_iterations
         self.n_starts = n_starts
         self.verbose = verbose
+        self.chunk_size = chunk_size
+        self.use_numba = use_numba
+        self.n_jobs = n_jobs
+
+    def _configure_numba_threads(self):
+        if not self.use_numba or self.n_jobs is None or self.n_jobs == -1:
+            return
+        if self.n_jobs < 1:
+            raise ValueError("n_jobs must be -1, None, or a positive integer.")
+        set_num_threads(self.n_jobs)
+
+    @staticmethod
+    def _sliding_mean_std(signal: np.ndarray, wlen: int):
+        cumsum = np.concatenate(([0.0], np.cumsum(signal, dtype=np.float64)))
+        cumsum_sq = np.concatenate(([0.0], np.cumsum(signal ** 2, dtype=np.float64)))
+
+        window_sum = cumsum[wlen:] - cumsum[:-wlen]
+        window_sum_sq = cumsum_sq[wlen:] - cumsum_sq[:-wlen]
+        mean = window_sum / wlen
+        var = window_sum_sq / wlen - mean ** 2
+        std = np.sqrt(np.maximum(var, 0.0))
+        return mean, std
+
+    def _iter_normalized_windows(self):
+        for start in range(0, self.set_size_, self.chunk_size):
+            end = min(start + self.chunk_size, self.set_size_)
+            segment = self.signal_[start:end + self.wlen - 1]
+            windows = np.lib.stride_tricks.sliding_window_view(segment, self.wlen)
+            windows = (
+                (windows - self.window_mean_[start:end, np.newaxis])
+                / self.window_std_[start:end, np.newaxis]
+            )
+            yield start, end, windows
 
     def _freq(self, patterns: np.ndarray) -> float:  # verified
         """Compute the frequency score of the given patterns.
@@ -66,9 +102,27 @@ class LatentMotif(object):
         freq : float
             Frequency score. Measures the similarity of the given patterns to the internal set.
         """
-        dist = np.sum((self.set_[:, np.newaxis, :] - patterns[np.newaxis, ...]) ** 2, axis=2)
-        exp_dist = np.exp(-self.alpha / self.radius * dist)
-        freq = 1 / (self.n_patterns * self.set_size_) * np.sum(exp_dist)
+        if self.use_numba:
+            return _freq_numba(
+                self.signal_,
+                self.window_mean_,
+                self.window_std_,
+                patterns,
+                self.alpha,
+                self.radius,
+                self.n_patterns,
+                self.set_size_,
+                self.wlen,
+            )
+
+        exp_dist_sum = 0.0
+        for _, _, windows in self._iter_normalized_windows():
+            dist = np.sum(
+                (windows[:, np.newaxis, :] - patterns[np.newaxis, ...]) ** 2,
+                axis=2)
+            exp_dist_sum += np.sum(np.exp(-self.alpha / self.radius * dist))
+
+        freq = 1 / (self.n_patterns * self.set_size_) * exp_dist_sum
         return freq
 
     def _pen(self, patterns):  # verified
@@ -121,10 +175,50 @@ class LatentMotif(object):
         div_freq : float
             Frequency score derivative
         """
-        diff = self.set_[:, np.newaxis, :] - patterns[np.newaxis, ...]
-        exp_dist = np.exp(-self.alpha / self.radius * np.sum(diff ** 2, axis=2))
-        div_freq = -2 * self.alpha / (self.n_patterns * self.set_size_ * self.radius) * np.sum(exp_dist[..., np.newaxis] * diff, axis=0)
+        if self.use_numba:
+            return _freq_derivative_numba(
+                self.signal_,
+                self.window_mean_,
+                self.window_std_,
+                patterns,
+                self.alpha,
+                self.radius,
+                self.n_patterns,
+                self.set_size_,
+                self.wlen,
+            )
+
+        div_sum = np.zeros_like(patterns)
+        for _, _, windows in self._iter_normalized_windows():
+            diff = windows[:, np.newaxis, :] - patterns[np.newaxis, ...]
+            exp_dist = np.exp(-self.alpha / self.radius * np.sum(diff ** 2, axis=2))
+            div_sum += np.sum(exp_dist[..., np.newaxis] * diff, axis=0)
+
+        div_freq = (
+            -2 * self.alpha
+            / (self.n_patterns * self.set_size_ * self.radius)
+            * div_sum
+        )
         return div_freq
+
+    def _pattern_distances(self, patterns: np.ndarray) -> np.ndarray:
+        if self.use_numba:
+            return _pattern_distances_numba(
+                self.signal_,
+                self.window_mean_,
+                self.window_std_,
+                patterns,
+                patterns.shape[0],
+                self.set_size_,
+                self.wlen,
+            )
+
+        dist = np.empty((self.set_size_, patterns.shape[0]), dtype=np.float64)
+        for start, end, windows in self._iter_normalized_windows():
+            dist[start:end] = np.sum(
+                (windows[:, np.newaxis, :] - patterns[np.newaxis, ...]) ** 2,
+                axis=2)
+        return dist
 
     def _pen_derivative(self, patterns):
         """Compute the derivative of the penalty score with respect to the patterns.
@@ -159,10 +253,11 @@ class LatentMotif(object):
             Fitted estimator.
         """
         # initialization
-        self.signal_ = signal
-        self.set_ = np.lib.stride_tricks.sliding_window_view(signal, self.wlen)
-        self.set_ = (self.set_ - np.mean(self.set_, axis=1).reshape(-1, 1)) / np.std(self.set_, axis=1).reshape(-1, 1)
-        self.set_size_ = self.set_.shape[0]
+        self._configure_numba_threads()
+        self.signal_ = signal.astype(np.float64, copy=False)
+        self.window_mean_, self.window_std_ = self._sliding_mean_std(
+            self.signal_, self.wlen)
+        self.set_size_ = self.signal_.shape[0] - self.wlen + 1
         self.score_ = -np.inf
         self.patterns_ = np.zeros((self.n_patterns, self.wlen))
 
@@ -179,7 +274,6 @@ class LatentMotif(object):
                 print(f"New best score found: {score}")
                 self.score_ = score
                 self.patterns_ = patterns
-                break
 
         if self.verbose:
             print(f"Successfully finished, best score: {self.score_}")
@@ -207,12 +301,9 @@ class LatentMotif(object):
         return patterns, score
 
     @property
-    def prediction_mask_(self) -> np.ndarray:
-        dist = np.sum(
-            (self.set_[:, np.newaxis, :] - self.patterns_[np.newaxis, ...]) ** 2,
-            axis=2)
+    def prediction_indices_(self) -> list:
+        dist = self._pattern_distances(self.patterns_)
         idx_lsts = []
-        # print(np.sort(dist)[:10])
         for line in dist.T:
             idxs = np.arange(line.shape[0])
             idx_lst = []
@@ -233,6 +324,11 @@ class LatentMotif(object):
                 # break
             idx_lsts.append(idx_lst)
 
+        return idx_lsts
+
+    @property
+    def prediction_mask_(self) -> np.ndarray:
+        idx_lsts = self.prediction_indices_
         mask = np.zeros((self.n_patterns, self.signal_.shape[0]))
         for i, p_idx in enumerate(idx_lsts):
             for idx in p_idx:
@@ -242,3 +338,65 @@ class LatentMotif(object):
         mask = mask[~np.all(mask == 0, axis=1)]
 
         return mask, idx_lsts
+
+
+@njit(cache=True, parallel=True)
+def _freq_numba(signal, mean, std, patterns, alpha, radius,
+                n_patterns, set_size, wlen):
+    exp_dist_sum = 0.0
+    for i in prange(set_size):
+        for p in range(n_patterns):
+            dist = 0.0
+            for d in range(wlen):
+                value = (signal[i + d] - mean[i]) / std[i]
+                diff = value - patterns[p, d]
+                dist += diff * diff
+            exp_dist_sum += np.exp(-alpha / radius * dist)
+
+    return exp_dist_sum / (n_patterns * set_size)
+
+
+@njit(cache=True, parallel=True)
+def _freq_derivative_numba(signal, mean, std, patterns, alpha, radius,
+                           n_patterns, set_size, wlen):
+    weights = np.empty((set_size, n_patterns), dtype=np.float64)
+
+    for i in prange(set_size):
+        for p in range(n_patterns):
+            dist = 0.0
+            for d in range(wlen):
+                value = (signal[i + d] - mean[i]) / std[i]
+                diff = value - patterns[p, d]
+                dist += diff * diff
+            weights[i, p] = np.exp(-alpha / radius * dist)
+
+    div_freq = np.empty((n_patterns, wlen), dtype=np.float64)
+    scale = -2 * alpha / (n_patterns * set_size * radius)
+
+    for flat_idx in prange(n_patterns * wlen):
+        p = flat_idx // wlen
+        d = flat_idx - p * wlen
+        total = 0.0
+        for i in range(set_size):
+            value = (signal[i + d] - mean[i]) / std[i]
+            total += weights[i, p] * (value - patterns[p, d])
+        div_freq[p, d] = scale * total
+
+    return div_freq
+
+
+@njit(cache=True, parallel=True)
+def _pattern_distances_numba(signal, mean, std, patterns,
+                             n_patterns, set_size, wlen):
+    dist = np.empty((set_size, n_patterns), dtype=np.float64)
+
+    for i in prange(set_size):
+        for p in range(n_patterns):
+            total = 0.0
+            for d in range(wlen):
+                value = (signal[i + d] - mean[i]) / std[i]
+                diff = value - patterns[p, d]
+                total += diff * diff
+            dist[i, p] = total
+
+    return dist
