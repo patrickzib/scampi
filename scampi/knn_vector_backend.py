@@ -144,7 +144,7 @@ class VectorSearchNearestNeighbors:
         )
         self.pynndescent_leaf_size = kwargs.get("pynndescent_leaf_size", 24)
         self.pynndescent_pruning_degree_multiplier = kwargs.get(
-            "pynndescent_pruning_degree_multiplier", 1.0)
+            "pynndescent_pruning_degree_multipliercur", 1.0)
         self.pynndescent_diversify_prob = kwargs.get("pynndescent_diversify_prob", 1.0)
         self.pynndescent_n_search_trees = kwargs.get("pynndescent_n_search_trees", 1)
         self.pynndescent_search_epsilon = kwargs.get("pynndescent_search_epsilon", 0.1)
@@ -169,10 +169,10 @@ class VectorSearchNearestNeighbors:
 
         Notes
         -----
-        FAISS is retried with candidate shortlist radii ``r``, ``2r``, and
-        ``4r`` when exclusion-zone post-processing finds zero complete rows.
-        The retry stops early as soon as at least one row has all ``k`` valid
-        neighbors.
+        FAISS and PyNNDescent are retried with candidate shortlist sizes
+        ``r``, ``2r``, and ``4r`` when exclusion-zone post-processing finds
+        zero complete rows. The retry stops early as soon as at least one row
+        has all ``k`` valid neighbors.
         """
         if X.shape[0] != 1:
             raise ValueError("Vector backends can handle univariate data, only.")
@@ -253,8 +253,52 @@ class VectorSearchNearestNeighbors:
                     = self.process_annoy(X_windows)
 
             elif self.index_strategy == "pynndescent":
-                D, index_create_time, index_search_time, knns, memory_usage \
-                    = self.process_pynndescent(X_windows)
+                original_n_neighbors = self.pynndescent_n_neighbors
+                attempts = [
+                    original_n_neighbors,
+                    original_n_neighbors * 2,
+                    original_n_neighbors * 4,
+                ]
+                index_create_time = 0.0
+                index_search_time = 0.0
+                memory_usage = 0.0
+                post_process_time = time.time()
+
+                if self.verbose:
+                    print("    Applying exclusion zone")
+
+                try:
+                    for attempt, n_neighbors in enumerate(attempts):
+                        self.pynndescent_n_neighbors = n_neighbors
+
+                        D, create_time, search_time, knns, attempt_memory \
+                            = self.process_pynndescent(X_windows)
+                        D, knns = restore_original_indices(D, knns, permutation)
+                        D_exact, knns_exact = apply_exclusion_zone(
+                            X,
+                            self.m,
+                            D,
+                            knns,
+                            self.k,
+                            slack=self.slack
+                        )
+                        complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+                        index_create_time += create_time
+                        index_search_time += search_time
+                        memory_usage = max(memory_usage, attempt_memory)
+
+                        if complete_rows > 0 or attempt == len(attempts) - 1:
+                            break
+
+                        if self.verbose:
+                            print(
+                                "    No complete neighbor rows found; retrying "
+                                "PyNNDescent with n_neighbors="
+                                f"{attempts[attempt + 1]}"
+                            )
+                finally:
+                    self.pynndescent_n_neighbors = original_n_neighbors
 
             else:
                 raise ValueError(
@@ -262,7 +306,7 @@ class VectorSearchNearestNeighbors:
                     f"Available strategies: {index_strategies}"
                 )
 
-            if self.index_strategy != "faiss":
+            if self.index_strategy not in ["faiss", "pynndescent"]:
                 # Post-process the results to filter out distances and neighbors
                 post_process_time = time.time()
 
