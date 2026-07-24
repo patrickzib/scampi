@@ -363,8 +363,8 @@ class VectorSearchNearestNeighbors:
                 complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
 
             if self.verbose:
-                print(f"    First neighbors: {knns_exact[0]}")
-                print(f"    Last neighbors:  {knns_exact[-1]}")
+                #print(f"    First neighbors: {knns_exact[0]}")
+                #print(f"    Last neighbors:  {knns_exact[-1]}")
                 print(
                     f"    Complete neighbor rows: "
                     f"{complete_rows}/{len(knns_exact)}"
