@@ -548,7 +548,6 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             "pynndescent_pruning_degree_multiplier", kwargs)
         pynndescent_diversify_prob = force_get("pynndescent_diversify_prob", kwargs)
         pynndescent_n_search_trees = force_get("pynndescent_n_search_trees", kwargs)
-        pynndescent_search_epsilon = force_get("pynndescent_search_epsilon", kwargs)
 
         backend_name = (
             f"{backend} "
@@ -557,7 +556,6 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             f"pruning_degree_multiplier={pynndescent_pruning_degree_multiplier};"
             f"diversify_prob={pynndescent_diversify_prob};"
             f"n_search_trees={pynndescent_n_search_trees};"
-            f"search_epsilon={pynndescent_search_epsilon};"
             f"search_radius={search_radius};"
             f"random_state={random_state})")
 
@@ -568,7 +566,6 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                 f"_pdm={pynndescent_pruning_degree_multiplier}"
                 f"_dp={pynndescent_diversify_prob}"
                 f"_nst={pynndescent_n_search_trees}"
-                f"_se={pynndescent_search_epsilon}"
                 f"_search_radius={search_radius}"
                 f"_random_state={random_state}")
 

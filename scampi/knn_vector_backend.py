@@ -88,8 +88,6 @@ class VectorSearchNearestNeighbors:
             NNDescent diversification probability.
         pynndescent_n_search_trees : int, default=1
             NNDescent search tree count.
-        pynndescent_search_epsilon : float, default=0.1
-            NNDescent search epsilon.
     """
 
     def __init__(
@@ -151,7 +149,6 @@ class VectorSearchNearestNeighbors:
             "pynndescent_pruning_degree_multiplier", 1.0)
         self.pynndescent_diversify_prob = kwargs.get("pynndescent_diversify_prob", 1.0)
         self.pynndescent_n_search_trees = kwargs.get("pynndescent_n_search_trees", 1)
-        self.pynndescent_search_epsilon = kwargs.get("pynndescent_search_epsilon", 0.1)
 
     def compute_knns(self, X):
         """Compute approximate k-nearest neighbors with exact post-processing.
@@ -414,7 +411,7 @@ class VectorSearchNearestNeighbors:
         for i, X in enumerate(X_windows):
             index.add_item(i, X)
 
-        index.build(self.annoy_n_trees, n_jobs=-1)
+        index.build(self.annoy_n_trees, n_jobs=self.n_jobs)
         index_create_time = time.time() - index_create_time
 
         index_search_time = time.time()
@@ -461,7 +458,6 @@ class VectorSearchNearestNeighbors:
                 f"\tpruning_degree_multiplier: {self.pynndescent_pruning_degree_multiplier}")
             print(f"\tdiversify_prob: {self.pynndescent_diversify_prob}")
             print(f"\tn_search_trees: {self.pynndescent_n_search_trees}")
-            print(f"\tsearch_epsilon: {self.pynndescent_search_epsilon}")
 
         index_create_time = time.time() - index_create_time
 
