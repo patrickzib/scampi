@@ -53,6 +53,7 @@ import numpy as np
 
 
 HPC_DATA_PATH = "/vol/fob-wbib-vol2/wbi/schaefpa/motiflets/momp"
+DEFAULT_RANDOM_STATE = 42
 RUN_LOCAL = not (os.path.exists(HPC_DATA_PATH) and os.path.isdir(HPC_DATA_PATH))
 
 DEFAULT_METHODS = ["faiss-hnsw"]
@@ -105,7 +106,7 @@ def parse_methods(value):
 def build_runs(args):
     runs = []
     methods = parse_methods(args.methods)
-    random_kwargs = {"random_state": args.random_state}
+    random_kwargs = {"random_state": DEFAULT_RANDOM_STATE}
 
     if "scampi" in methods:
         for delta in args.scampi_deltas:
@@ -132,8 +133,7 @@ def build_runs(args):
                     f"faiss HNSW M={M} "
                     f"efConstruction={ef_construction} "
                     f"efSearch={ef_search} "
-                    f"search_radius={args.search_radius} "
-                    f"random_state={args.random_state}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs={
@@ -151,8 +151,7 @@ def build_runs(args):
             runs.append(BenchmarkRun(
                 label=(
                     f"faiss LSH nbits={nbits} "
-                    f"search_radius={args.search_radius} "
-                    f"random_state={args.random_state}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs={
@@ -177,8 +176,7 @@ def build_runs(args):
                 label=(
                     f"faiss IVF nlist={nlist or 'sqrt(n)'} "
                     f"nprobe={nprobe} "
-                    f"search_radius={args.search_radius} "
-                    f"random_state={args.random_state}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="faiss",
                 kwargs=kwargs,
@@ -199,8 +197,7 @@ def build_runs(args):
                 args.pynndescent_n_search_trees):
             runs.append(BenchmarkRun(
                 label=(
-                    f"pynndescent search_radius={args.search_radius} "
-                    f"random_state={args.random_state}"
+                    f"pynndescent search_radius={args.search_radius}"
                 ),
                 backend="pynndescent",
                 kwargs={
@@ -221,8 +218,7 @@ def build_runs(args):
             runs.append(BenchmarkRun(
                 label=(
                     f"annoy n_trees={n_trees} search_k={search_k} "
-                    f"search_radius={args.search_radius} "
-                    f"random_state={args.random_state}"
+                    f"search_radius={args.search_radius}"
                 ),
                 backend="annoy",
                 kwargs={
@@ -263,7 +259,7 @@ def build_pq_runs(faiss_index, args):
             "faiss_nprobe": nprobe,
             "faiss_pq_nbits": pq_nbits,
             "search_radius": args.search_radius,
-            "random_state": args.random_state,
+            "random_state": DEFAULT_RANDOM_STATE,
         }
         if nlist is not None:
             kwargs["faiss_nlist"] = nlist
@@ -274,8 +270,7 @@ def build_pq_runs(faiss_index, args):
             label=(
                 f"faiss {faiss_index} nlist={nlist or 'sqrt(n)'} "
                 f"nprobe={nprobe} pq_m={pq_m or 'auto'} "
-                f"pq_bits={pq_nbits} search_radius={args.search_radius} "
-                f"random_state={args.random_state}"
+                f"pq_bits={pq_nbits} search_radius={args.search_radius}"
             ),
             backend="faiss",
             kwargs=kwargs,
@@ -343,15 +338,6 @@ def parse_args():
     )
     parser.add_argument("--k-max", type=int, default=10)
     parser.add_argument("--n-jobs", type=int, default=-1)
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        default=42,
-        help=(
-            "Seed for deterministic vector-backend window shuffling and "
-            "backend randomness where supported."
-        ),
-    )
 
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
                         default=[0.1])
