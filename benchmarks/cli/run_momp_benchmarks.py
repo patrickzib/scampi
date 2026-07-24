@@ -196,8 +196,7 @@ def build_runs(args):
                 args.pynndescent_leaf_size,
                 args.pynndescent_pruning_degree_multiplier,
                 args.pynndescent_diversify_prob,
-                args.pynndescent_n_search_trees,
-                args.pynndescent_search_epsilon):
+                args.pynndescent_n_search_trees):
             runs.append(BenchmarkRun(
                 label=(
                     f"pynndescent search_radius={args.search_radius} "
@@ -211,7 +210,6 @@ def build_runs(args):
                     "pynndescent_pruning_degree_multiplier": values[2],
                     "pynndescent_diversify_prob": values[3],
                     "pynndescent_n_search_trees": values[4],
-                    "pynndescent_search_epsilon": values[5],
                     **random_kwargs,
                 },
             ))
@@ -410,9 +408,6 @@ def parse_args():
     parser.add_argument("--pynndescent-n-search-trees",
                         type=lambda v: parse_csv(v, int),
                         default=[1])
-    parser.add_argument("--pynndescent-search-epsilon",
-                        type=lambda v: parse_csv(v, float),
-                        default=[0.2])
 
     parser.add_argument("--annoy-n-trees", type=lambda v: parse_csv(v, int),
                         default=[100])
