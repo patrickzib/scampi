@@ -49,6 +49,9 @@ class VectorSearchNearestNeighbors:
     verbose : bool, default=True
         Whether to print index parameters and post-processing diagnostics.
     **kwargs
+        random_state : int or None, default=42
+            Seed for the deterministic window shuffle and approximate backend
+            randomness where supported.
         faiss_index : {"HNSW", "LSH", "IVF", "IVFPQ", "IVFPQ+HNSW"}
             FAISS index type. Required when ``index_strategy="faiss"``.
         faiss_M : int, default=64
@@ -109,6 +112,7 @@ class VectorSearchNearestNeighbors:
         self.n_jobs = os.cpu_count() if self.n_jobs < 1 else self.n_jobs
 
         self.verbose = verbose
+        self.random_state = kwargs.get("random_state", 42)
 
         #### faiss
         self.faiss_index = kwargs.get("faiss_index")
@@ -191,12 +195,12 @@ class VectorSearchNearestNeighbors:
             X_windows = znorm_windows(X, self.m)
 
             # We must shuffle
-            np.random.seed(42)
             permutation = np.arange(len(X_windows), dtype=np.int32)
-            np.random.shuffle(permutation)
+            rng = np.random.default_rng(self.random_state)
+            rng.shuffle(permutation)
             X_windows = X_windows[permutation]
 
-            retry_multipliers = (1, 2, 4)
+            retry_multipliers = (1, 2, 4, 8)
             retry_count = len(retry_multipliers)
             index_create_time = 0.0
             index_search_time = 0.0
@@ -443,6 +447,7 @@ class VectorSearchNearestNeighbors:
             pruning_degree_multiplier=self.pynndescent_pruning_degree_multiplier,
             diversify_prob=self.pynndescent_diversify_prob,
             n_search_trees=self.pynndescent_n_search_trees,
+            random_state=self.random_state,
             n_jobs=self.n_jobs
             # compressed=True,
             # verbose=True,

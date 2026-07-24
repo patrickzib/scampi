@@ -521,19 +521,27 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
     elif backend == "annoy":
         annoy_n_trees = force_get("annoy_n_trees", kwargs)
         annoy_search_k = force_get("annoy_search_k", kwargs)
+        search_radius = force_get("search_radius", kwargs)
+        random_state = kwargs.get("random_state", 42)
         backend_name = \
             (f"{backend} "
              f"(annoy_n_trees={annoy_n_trees};"
-             f"annoy_search_k={annoy_search_k})"
+             f"annoy_search_k={annoy_search_k};"
+             f"search_radius={search_radius};"
+             f"random_state={random_state})"
              )
 
         new_filename = (
                 new_filename +
                 f"_n_trees={annoy_n_trees}"
                 f"_search_k={annoy_search_k}"
+                f"_search_radius={search_radius}"
+                f"_random_state={random_state}"
         )
 
     elif backend == "pynndescent":
+        search_radius = force_get("search_radius", kwargs)
+        random_state = kwargs.get("random_state", 42)
         pynndescent_n_neighbors = force_get("pynndescent_n_neighbors", kwargs)
         pynndescent_leaf_size = force_get("pynndescent_leaf_size", kwargs)
         pynndescent_pruning_degree_multiplier = force_get(
@@ -549,7 +557,9 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             f"pruning_degree_multiplier={pynndescent_pruning_degree_multiplier};"
             f"diversify_prob={pynndescent_diversify_prob};"
             f"n_search_trees={pynndescent_n_search_trees};"
-            f"search_epsilon={pynndescent_search_epsilon})")
+            f"search_epsilon={pynndescent_search_epsilon};"
+            f"search_radius={search_radius};"
+            f"random_state={random_state})")
 
         new_filename = (
                 new_filename +
@@ -558,11 +568,14 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                 f"_pdm={pynndescent_pruning_degree_multiplier}"
                 f"_dp={pynndescent_diversify_prob}"
                 f"_nst={pynndescent_n_search_trees}"
-                f"_se={pynndescent_search_epsilon}")
+                f"_se={pynndescent_search_epsilon}"
+                f"_search_radius={search_radius}"
+                f"_random_state={random_state}")
 
     elif backend == "faiss":
         faiss_index = force_get("faiss_index", kwargs)
         search_radius = force_get("search_radius", kwargs)
+        random_state = kwargs.get("random_state", 42)
 
         if faiss_index == "HNSW":
             faiss_efConstruction = force_get("faiss_efConstruction",
@@ -575,7 +588,8 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"efConstruction={faiss_efConstruction};"
                             f"efSearch={faiss_efSearch};"
                             f"M={faiss_M};"
-                            f"search_radius={search_radius})")
+                            f"search_radius={search_radius};"
+                            f"random_state={random_state})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
@@ -583,7 +597,8 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"_efConstruction_{faiss_efConstruction}"
                             f"_efSearch_{faiss_efSearch}"
                             f"_M_{faiss_M}"
-                            f"_search_radius_{search_radius}")
+                            f"_search_radius_{search_radius}"
+                            f"_random_state_{random_state}")
 
         elif faiss_index in ["IVF", "IVFPQ", "IVFPQ+HNSW"]:
             faiss_nlist = force_get("faiss_nlist", kwargs)
@@ -595,14 +610,16 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"(index={faiss_index};"
                             f"faiss_nlist={faiss_nlist};"
                             f"faiss_nprobe={faiss_nprobe};"
-                            f"search_radius={search_radius})")
+                            f"search_radius={search_radius};"
+                            f"random_state={random_state})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
                             f"_index_{faiss_index}"
                             f"_faiss_nlist_{faiss_nlist}"
                             f"_faiss_nprobe_{faiss_nprobe}"
-                            f"_search_radius_{search_radius}")
+                            f"_search_radius_{search_radius}"
+                            f"_random_state_{random_state}")
 
             if faiss_index in ["IVFPQ", "IVFPQ+HNSW"]:
                 backend_name = (
@@ -621,13 +638,15 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             backend_name = (f"{backend} "
                             f"(index={faiss_index};"
                             f"faiss_nbits={faiss_nbits};"
-                            f"search_radius={search_radius})")
+                            f"search_radius={search_radius};"
+                            f"random_state={random_state})")
 
             new_filename = (new_filename +
                             f"_backend_{backend}"
                             f"_index_{faiss_index}"
                             f"_faiss_nbits_{faiss_nbits}"
-                            f"_search_radius_{search_radius}")
+                            f"_search_radius_{search_radius}"
+                            f"_random_state_{random_state}")
 
     if subsampling:
         backend_name = f"{backend_name} (subsampling={subsampling})"
