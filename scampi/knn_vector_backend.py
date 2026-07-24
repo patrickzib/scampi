@@ -169,7 +169,7 @@ class VectorSearchNearestNeighbors:
 
         Notes
         -----
-        FAISS and PyNNDescent are retried with candidate shortlist sizes
+        FAISS, Annoy, and PyNNDescent are retried with candidate shortlist sizes
         ``r``, ``2r``, and ``4r`` when exclusion-zone post-processing finds
         zero complete rows. The retry stops early as soon as at least one row
         has all ``k`` valid neighbors.
@@ -196,16 +196,13 @@ class VectorSearchNearestNeighbors:
             np.random.shuffle(permutation)
             X_windows = X_windows[permutation]
 
+            retry_multipliers = (1, 2, 4)
+            retry_count = len(retry_multipliers)
             post_process_time = None
 
             if self.index_strategy == "faiss":
                 original_search_radius = self.search_radius
                 original_ef_search = self.efSearch
-                attempts = [
-                    original_search_radius,
-                    original_search_radius * 2,
-                    original_search_radius * 4
-                ]
                 index_create_time = 0.0
                 index_search_time = 0.0
                 memory_usage = 0.0
@@ -215,9 +212,16 @@ class VectorSearchNearestNeighbors:
                     print("    Applying exclusion zone")
 
                 try:
-                    for attempt, search_radius in enumerate(attempts):
-                        self.search_radius = search_radius
+                    for attempt, multiplier in enumerate(retry_multipliers):
+                        self.search_radius = original_search_radius * multiplier
                         self.efSearch = max(self.efSearch, self.search_radius * self.k)
+
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count}: "
+                                f"search_radius={self.search_radius} "
+                                f"query_k={self.search_radius * self.k}"
+                            )
 
                         D, create_time, search_time, knns, attempt_memory \
                             = self.process_faiss(X_windows)
@@ -236,29 +240,32 @@ class VectorSearchNearestNeighbors:
                         index_search_time += search_time
                         memory_usage = max(memory_usage, attempt_memory)
 
-                        if complete_rows > 0 or attempt == len(attempts) - 1:
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count} "
+                                f"complete neighbor rows: "
+                                f"{complete_rows}/{len(knns_exact)}"
+                            )
+
+                        if (complete_rows > 0
+                                or attempt == retry_count - 1):
                             break
 
                         if self.verbose:
+                            next_radius = (
+                                original_search_radius
+                                * retry_multipliers[attempt + 1]
+                            )
                             print(
                                 "    No complete neighbor rows found; retrying FAISS "
-                                f"with search_radius={attempts[attempt + 1]}"
+                                f"with search_radius={next_radius}"
                             )
                 finally:
                     self.search_radius = original_search_radius
                     self.efSearch = original_ef_search
 
             elif self.index_strategy == "annoy":
-                D, index_create_time, index_search_time, knns, memory_usage \
-                    = self.process_annoy(X_windows)
-
-            elif self.index_strategy == "pynndescent":
-                original_n_neighbors = self.pynndescent_n_neighbors
-                attempts = [
-                    original_n_neighbors,
-                    original_n_neighbors * 2,
-                    original_n_neighbors * 4,
-                ]
+                original_search_radius = self.search_radius
                 index_create_time = 0.0
                 index_search_time = 0.0
                 memory_usage = 0.0
@@ -268,8 +275,78 @@ class VectorSearchNearestNeighbors:
                     print("    Applying exclusion zone")
 
                 try:
-                    for attempt, n_neighbors in enumerate(attempts):
-                        self.pynndescent_n_neighbors = n_neighbors
+                    for attempt, multiplier in enumerate(retry_multipliers):
+                        self.search_radius = original_search_radius * multiplier
+
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count}: "
+                                f"search_radius={self.search_radius} "
+                                f"query_k={self.search_radius * self.k}"
+                            )
+
+                        D, create_time, search_time, knns, attempt_memory \
+                            = self.process_annoy(X_windows)
+                        D, knns = restore_original_indices(D, knns, permutation)
+                        D_exact, knns_exact = apply_exclusion_zone(
+                            X,
+                            self.m,
+                            D,
+                            knns,
+                            self.k,
+                            slack=self.slack
+                        )
+                        complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
+
+                        index_create_time += create_time
+                        index_search_time += search_time
+                        memory_usage = max(memory_usage, attempt_memory)
+
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count} "
+                                f"complete neighbor rows: "
+                                f"{complete_rows}/{len(knns_exact)}"
+                            )
+
+                        if (complete_rows > 0
+                                or attempt == retry_count - 1):
+                            break
+
+                        if self.verbose:
+                            next_radius = (
+                                original_search_radius
+                                * retry_multipliers[attempt + 1]
+                            )
+                            print(
+                                "    No complete neighbor rows found; retrying Annoy "
+                                f"with search_radius={next_radius}"
+                            )
+                finally:
+                    self.search_radius = original_search_radius
+
+            elif self.index_strategy == "pynndescent":
+                original_n_neighbors = self.pynndescent_n_neighbors
+                index_create_time = 0.0
+                index_search_time = 0.0
+                memory_usage = 0.0
+                post_process_time = time.time()
+
+                if self.verbose:
+                    print("    Applying exclusion zone")
+
+                try:
+                    for attempt, multiplier in enumerate(retry_multipliers):
+                        self.pynndescent_n_neighbors = (
+                            original_n_neighbors * multiplier
+                        )
+
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count}: "
+                                "n_neighbors="
+                                f"{self.pynndescent_n_neighbors}"
+                            )
 
                         D, create_time, search_time, knns, attempt_memory \
                             = self.process_pynndescent(X_windows)
@@ -288,14 +365,26 @@ class VectorSearchNearestNeighbors:
                         index_search_time += search_time
                         memory_usage = max(memory_usage, attempt_memory)
 
-                        if complete_rows > 0 or attempt == len(attempts) - 1:
+                        if self.verbose:
+                            print(
+                                f"    Attempt {attempt + 1}/{retry_count} "
+                                f"complete neighbor rows: "
+                                f"{complete_rows}/{len(knns_exact)}"
+                            )
+
+                        if (complete_rows > 0
+                                or attempt == retry_count - 1):
                             break
 
                         if self.verbose:
+                            next_n_neighbors = (
+                                original_n_neighbors
+                                * retry_multipliers[attempt + 1]
+                            )
                             print(
                                 "    No complete neighbor rows found; retrying "
                                 "PyNNDescent with n_neighbors="
-                                f"{attempts[attempt + 1]}"
+                                f"{next_n_neighbors}"
                             )
                 finally:
                     self.pynndescent_n_neighbors = original_n_neighbors
@@ -306,7 +395,7 @@ class VectorSearchNearestNeighbors:
                     f"Available strategies: {index_strategies}"
                 )
 
-            if self.index_strategy not in ["faiss", "pynndescent"]:
+            if self.index_strategy not in ["faiss", "annoy", "pynndescent"]:
                 # Post-process the results to filter out distances and neighbors
                 post_process_time = time.time()
 
