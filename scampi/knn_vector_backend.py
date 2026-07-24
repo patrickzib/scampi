@@ -39,9 +39,9 @@ class VectorSearchNearestNeighbors:
     index_strategy : {"faiss", "annoy", "pynndescent"}, default="faiss"
         Approximate nearest-neighbor implementation to use.
     search_radius : int, default=5
-        Multiplier for the raw candidate shortlist size. For FAISS, the index
-        is queried for ``search_radius * k`` neighbors before exclusion-zone
-        post-processing.
+        Multiplier for the raw candidate shortlist size. Approximate vector
+        backends query at least ``search_radius * k`` neighbors before
+        exclusion-zone post-processing.
     slack : float, default=0.5
         Exclusion-zone factor around accepted neighbors.
     n_jobs : int, default=4
@@ -75,7 +75,8 @@ class VectorSearchNearestNeighbors:
         annoy_search_k : int, default=-1
             Annoy search effort.
         pynndescent_n_neighbors : int, default=10
-            Number of neighbors for NNDescent graph construction.
+            Number of neighbors for NNDescent graph construction. The effective
+            value is at least ``search_radius * k``.
         pynndescent_leaf_size : int, default=24
             NNDescent tree leaf size.
         pynndescent_pruning_degree_multiplier : float, default=1.0
@@ -137,6 +138,10 @@ class VectorSearchNearestNeighbors:
         #### pynndescent
 
         self.pynndescent_n_neighbors = kwargs.get("pynndescent_n_neighbors", 10)
+        self.pynndescent_n_neighbors = max(
+            self.pynndescent_n_neighbors,
+            self.search_radius * self.k,
+        )
         self.pynndescent_leaf_size = kwargs.get("pynndescent_leaf_size", 24)
         self.pynndescent_pruning_degree_multiplier = kwargs.get(
             "pynndescent_pruning_degree_multiplier", 1.0)
@@ -299,10 +304,16 @@ class VectorSearchNearestNeighbors:
             set_num_threads(self.previous_jobs)
 
     def process_annoy(self, X_windows):
-        """Build and query an Annoy index on shuffled z-normalized windows."""
+        """Build and query an Annoy index on shuffled z-normalized windows.
+
+        The query count is ``self.search_radius * self.k``. Returned neighbor
+        indices refer to the shuffled window order and must be restored by
+        ``restore_original_indices`` before motiflet post-processing.
+        """
         import annoy
 
         d = X_windows.shape[-1]
+        query_k = self.search_radius * self.k
         # https://github.com/spotify/annoy
         index_create_time = time.time()
         index = annoy.AnnoyIndex(d, metric="euclidean")
@@ -311,6 +322,8 @@ class VectorSearchNearestNeighbors:
             print(f"\tannoy")
             print(f"\tn_trees:  {self.annoy_n_trees}")
             print(f"\tsearch_k:  {self.annoy_search_k}")
+            print(f"\tsearch_radius:  {self.search_radius}")
+            print(f"\tquery_k:  {query_k}")
 
         for i, X in enumerate(X_windows):
             index.add_item(i, X)
@@ -320,11 +333,11 @@ class VectorSearchNearestNeighbors:
 
         index_search_time = time.time()
         # no method to query multiple samples at the same time
-        knns = np.zeros((len(X_windows), self.k), dtype=np.int32)
-        D = np.zeros((len(X_windows), self.k), dtype=np.float32)
+        knns = np.zeros((len(X_windows), query_k), dtype=np.int32)
+        D = np.zeros((len(X_windows), query_k), dtype=np.float32)
         for i, X in enumerate(X_windows):
             knns[i], D[i] = index.get_nns_by_vector(
-                X, self.k, self.annoy_search_k, include_distances=True)
+                X, query_k, self.annoy_search_k, include_distances=True)
 
         index_search_time = time.time() - index_search_time
 
