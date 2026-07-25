@@ -341,7 +341,7 @@ def parse_args():
 
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
                         default=[0.1])
-    parser.add_argument("--scampi-max-memory", default="2 GB")
+    parser.add_argument("--scampi-max-memory", default="8 GB")
     parser.add_argument(
         "--exact-refine",
         action=argparse.BooleanOptionalAction,
