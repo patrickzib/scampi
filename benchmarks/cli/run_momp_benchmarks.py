@@ -63,7 +63,6 @@ AVAILABLE_METHODS = [
     "faiss-lsh",
     "faiss-ivf",
     "faiss-ivfpq",
-    "faiss-ivfpq-hnsw",
     "pynndescent",
     "annoy",
     "scalable",
@@ -184,9 +183,6 @@ def build_runs(args):
 
     if "faiss-ivfpq" in methods:
         runs.extend(build_pq_runs("IVFPQ", args))
-
-    if "faiss-ivfpq-hnsw" in methods:
-        runs.extend(build_pq_runs("IVFPQ+HNSW", args))
 
     if "pynndescent" in methods:
         for values in itertools.product(
