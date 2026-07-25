@@ -52,7 +52,7 @@ class VectorSearchNearestNeighbors:
         random_state : int or None, default=42
             Seed for the deterministic window shuffle and approximate backend
             randomness where supported.
-        faiss_index : {"HNSW", "LSH", "IVF", "IVFPQ", "IVFPQ+HNSW"}
+        faiss_index : {"HNSW", "LSH", "IVF", "IVFPQ"}
             FAISS index type. Required when ``index_strategy="faiss"``.
         faiss_M : int, default=64
             HNSW graph degree.
@@ -559,39 +559,6 @@ class VectorSearchNearestNeighbors:
                 index = faiss.index_factory(d, factory_string, faiss.METRIC_L2)
                 index.train(X_windows)
 
-                index.nprobe = self.nprobe  # TODO: reset every time needed?
-
-            elif self.faiss_index == "IVFPQ+HNSW":
-                # setup our IVF-PQ parameters
-
-                if not self.nlist:
-                    # number of clusters/cells set to sqrt(n)
-                    self.nlist = int(np.sqrt(X_windows.shape[0]))
-
-                if self.verbose:
-                    print(
-                        f"    FAISS IVFPQ+HNSW: nlist={self.nlist} "
-                        f"nprobe={self.nprobe} M={self.M} "
-                        f"efConstruction={self.efConstruction} "
-                        f"efSearch={self.efSearch} "
-                        f"search_radius={self.search_radius}"
-                    )
-
-                mm, nbits = self._faiss_pq_params(d)
-                if self.verbose:
-                    print(f"    PQ: m={mm} bits={nbits}")
-
-                # The coarse quantizer is responsible for finding the partition
-                # centroids that are nearest to the query vector so that vector search
-                # only needs to be performed on those partitions.
-                quantizer = faiss.IndexHNSWFlat(d, self.M)
-                quantizer.hnsw.efConstruction = self.efConstruction
-                quantizer.hnsw.efSearch = self.efSearch
-
-                index = faiss.IndexIVFPQ(quantizer, d, self.nlist, mm, nbits,
-                                         faiss.METRIC_L2)
-
-                index.train(X_windows)
                 index.nprobe = self.nprobe  # TODO: reset every time needed?
 
             else:

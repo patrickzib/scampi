@@ -593,7 +593,7 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"_M_{faiss_M}"
                             f"_search_radius_{search_radius}")
 
-        elif faiss_index in ["IVF", "IVFPQ", "IVFPQ+HNSW"]:
+        elif faiss_index in ["IVF", "IVFPQ"]:
             faiss_nlist = force_get("faiss_nlist", kwargs)
             faiss_nprobe = force_get("faiss_nprobe", kwargs)
             faiss_pq_m = force_get("faiss_pq_m", kwargs)
@@ -613,7 +613,7 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
                             f"_faiss_nprobe_{faiss_nprobe}"
                             f"_search_radius_{search_radius}")
 
-            if faiss_index in ["IVFPQ", "IVFPQ+HNSW"]:
+            if faiss_index in ["IVFPQ"]:
                 backend_name = (
                     backend_name[:-1] +
                     f";faiss_pq_m={faiss_pq_m};"
