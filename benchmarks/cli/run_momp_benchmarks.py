@@ -93,6 +93,10 @@ def parse_optional_int_csv(value):
     return parse_csv(value, cast)
 
 
+def format_faiss_nlist(nlist):
+    return nlist if nlist is not None else "auto=sqrt(n_windows)"
+
+
 def parse_methods(value):
     methods = parse_csv(value)
     unknown = sorted(set(methods) - set(AVAILABLE_METHODS))
@@ -174,7 +178,7 @@ def build_runs(args):
                 kwargs["faiss_nlist"] = nlist
             runs.append(BenchmarkRun(
                 label=(
-                    f"faiss IVF nlist={nlist or 'sqrt(n)'} "
+                    f"faiss IVF nlist={format_faiss_nlist(nlist)} "
                     f"nprobe={nprobe} "
                     f"search_radius={args.search_radius}"
                 ),
@@ -268,7 +272,7 @@ def build_pq_runs(faiss_index, args):
 
         runs.append(BenchmarkRun(
             label=(
-                f"faiss {faiss_index} nlist={nlist or 'sqrt(n)'} "
+                f"faiss {faiss_index} nlist={format_faiss_nlist(nlist)} "
                 f"nprobe={nprobe} pq_m={pq_m or 'auto'} "
                 f"pq_bits={pq_nbits} search_radius={args.search_radius}"
             ),
@@ -341,7 +345,7 @@ def parse_args():
 
     parser.add_argument("--scampi-deltas", type=lambda v: parse_csv(v, float),
                         default=[0.1])
-    parser.add_argument("--scampi-max-memory", default="2 GB")
+    parser.add_argument("--scampi-max-memory", default="8 GB")
     parser.add_argument(
         "--exact-refine",
         action=argparse.BooleanOptionalAction,
@@ -358,8 +362,16 @@ def parse_args():
                         default=[500])
     parser.add_argument("--faiss-efSearch", type=lambda v: parse_csv(v, int),
                         default=[400])
-    parser.add_argument("--faiss-nlist", type=parse_optional_int_csv,
-                        default=[None])
+    parser.add_argument(
+        "--faiss-nlist",
+        type=parse_optional_int_csv,
+        default=[None],
+        help=(
+            "Comma-separated IVF cell counts. Use 'auto' or leave unset to "
+            "let SCAMPI's FAISS wrapper set int(sqrt(n_windows)); FAISS does "
+            "not choose this value by itself."
+        ),
+    )
     parser.add_argument("--faiss-nprobe", type=lambda v: parse_csv(v, int),
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),

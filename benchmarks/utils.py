@@ -165,6 +165,10 @@ def force_get(key, kwargs):
         # raise ValueError(f"Parameter '{key}' not set")
 
 
+def format_faiss_nlist(nlist):
+    return nlist if nlist is not None else "auto=sqrt(n_windows)"
+
+
 def format_motiflet_result(length, motif_length, backend_name, duration,
                            memory_usage, extents, motiflets, elbow_points):
     lines = [
@@ -594,10 +598,11 @@ def infer_filename(backend, ds_name, k_max, kwargs, subsampling):
             faiss_nprobe = force_get("faiss_nprobe", kwargs)
             faiss_pq_m = force_get("faiss_pq_m", kwargs)
             faiss_pq_nbits = force_get("faiss_pq_nbits", kwargs)
+            faiss_nlist_label = format_faiss_nlist(faiss_nlist)
 
             backend_name = (f"{backend} "
                             f"(index={faiss_index};"
-                            f"faiss_nlist={faiss_nlist};"
+                            f"faiss_nlist={faiss_nlist_label};"
                             f"faiss_nprobe={faiss_nprobe};"
                             f"search_radius={search_radius})")
 
