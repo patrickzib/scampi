@@ -59,6 +59,26 @@ file = "LICENSE"
 requires = ["setuptools", "wheel", "toml", "build"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scampi*", "benchmarks*", "competitors*"]
+exclude = ["tests", "tests.*"]
+
+[tool.setuptools.package-data]
+scampi = [
+    "*.csv",
+    "*.csv.gz",
+    "*.arff",
+    "*.arff.gz",
+    "*.txt",
+    "*.ts",
+    "*.tsv",
+]
+
 [tool.pytest.ini_options]
 log_cli = true
 log_cli_level = "INFO"
