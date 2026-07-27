@@ -1,0 +1,5 @@
+length,motif length,backend,time in s,memory in MB,extent,motiflet,elbows
+5983000,512,faiss (index=IVFPQ;faiss_nlist=auto=sqrt(n_windows);faiss_nprobe=10;search_radius=10;faiss_pq_m=None;faiss_pq_nbits=4),725.0457808971405,47343.40234375,2.2957433337835482,[5945607 3640967    8644 5821163 2009331 5145866 5922752 3599650 5948790],"[array([4, 6])]"
+5983000,1024,faiss (index=IVFPQ;faiss_nlist=auto=sqrt(n_windows);faiss_nprobe=10;search_radius=10;faiss_pq_m=None;faiss_pq_nbits=4),690.8075923919678,82443.41015625,45.80761685093239,[   8583 5945548 2009272 5922689 3640903 5145801 5948720 5821107 3599588],"[array([4, 8])]"
+5983000,2048,faiss (index=IVFPQ;faiss_nlist=auto=sqrt(n_windows);faiss_nprobe=10;search_radius=10;faiss_pq_m=None;faiss_pq_nbits=4),751.6172993183136,152537.609375,181.59536127876618,[5818993 5143678 2007122 2902162 5920553 2642540 5188939 3666347 3718466],[array([6])]
+5983000,4096,faiss (index=IVFPQ;faiss_nlist=auto=sqrt(n_windows);faiss_nprobe=10;search_radius=10;faiss_pq_m=None;faiss_pq_nbits=4),1032.6467785835266,292628.703125,626.6815891173683,[1170354 5918543 5141659 2005104 3636708 5186924 5816989 2640522 2900144],[array([7])]

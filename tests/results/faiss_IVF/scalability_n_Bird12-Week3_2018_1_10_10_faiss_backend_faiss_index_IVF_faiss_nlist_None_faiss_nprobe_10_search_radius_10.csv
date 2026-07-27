@@ -1,0 +1,3 @@
+length,motif length,backend,time in s,memory in MB,extent,motiflet,elbows
+8595817,512,faiss (index=IVF;faiss_nlist=None;faiss_nprobe=10;search_radius=10),13755.193138122559,108668.37109375,0.0,[ 777428  862051  758980 1216631 2171690  724945 1956503  819081  776960],[array([2])]
+8595817,1024,faiss (index=IVF;faiss_nlist=None;faiss_nprobe=10;search_radius=10),42772.726771593094,177129.203125,58.851201212737124,[7585154 1292805 1249019 2281930  947137 7489430  398802  578246 8456219],[array([7])]
