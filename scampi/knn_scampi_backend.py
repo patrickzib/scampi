@@ -3,6 +3,11 @@ import psutil
 import numpy as np
 
 
+SCAMPI_TOP_N_PYATTIMO = "pyattimo"
+SCAMPI_TOP_N_MASK = "mask"
+SCAMPI_TOP_N_STRATEGIES = {SCAMPI_TOP_N_PYATTIMO, SCAMPI_TOP_N_MASK}
+
+
 class PyAttimoError(ImportError):
     """Raised when the pyattimo SCAMPI backend cannot be loaded."""
 
@@ -46,6 +51,8 @@ class SCAMPINearestNeighbors:
             top_k=1,
             slack=0.5,
             verbose=False,
+            elbow_deviation=1.0,
+            filter=True,
             **kwargs):
 
         self.m = m
@@ -53,15 +60,25 @@ class SCAMPINearestNeighbors:
         self.slack = slack
         self.top_k = top_k
         self.verbose = verbose
+        self.elbow_deviation = elbow_deviation
+        self.filter = filter
 
         self.scampi_delta = kwargs.get("scampi_delta", 0.1)
         self.scampi_max_memory = kwargs.get("scampi_max_memory", "2 GB")
         self.scampi_exact_refine = kwargs.get("scampi_exact_refine", False)
+        self.scampi_top_n_strategy = kwargs.get(
+            "scampi_top_n_strategy", SCAMPI_TOP_N_PYATTIMO)
+
+        if self.top_k < 1:
+            raise ValueError("top_N must be >= 1")
+        if self.scampi_top_n_strategy not in SCAMPI_TOP_N_STRATEGIES:
+            raise ValueError('scampi_top_n_strategy must be "pyattimo" or "mask"')
 
         consumed_kwargs = {
             "scampi_delta",
             "scampi_max_memory",
             "scampi_exact_refine",
+            "scampi_top_n_strategy",
         }
         unused_kwargs = {
             key: value for key, value in kwargs.items()
@@ -73,29 +90,34 @@ class SCAMPINearestNeighbors:
             f"delta={self.scampi_delta}, "
             f"max_memory={self.scampi_max_memory}, "
             f"exact_refine={self.scampi_exact_refine}, "
+            f"scampi_top_n_strategy={self.scampi_top_n_strategy}, "
             f"unused={unused_kwargs}"
         )
 
     def compute_knns(self, X):
         """Compute k-nearest neighbors using SCAMPI motiflet discovery."""
 
-        assert X.shape[0] == 1, \
-            "SCAMPI can handle univariate data, only."
+        if X.shape[0] != 1:
+            raise ValueError("SCAMPI can handle univariate data, only.")
 
         try:
             import pyattimo
         except ImportError as e:
             raise PyAttimoError(f"Failed to import SCAMPI: {str(e)}") from e
 
-        n = X.shape[-1] - self.m + 1
-
         pid = os.getpid()
         process = psutil.Process(pid)
 
-        # k_motiflet_distances = np.zeros(self.k_max, dtype=np.float64)
-        # k_motiflet_candidates = np.empty(self.k_max, dtype=object)
-        k_motiflet_distances = np.full((self.k_max, self.top_k), np.inf,
-                                       dtype=np.float64)
+        ts = X.flatten()
+        if self.scampi_top_n_strategy == SCAMPI_TOP_N_MASK:
+            return self._compute_masked_knns(ts, pyattimo, process)
+
+        return self._compute_pyattimo_knns(ts, self.top_k, pyattimo, process)
+
+    def _compute_pyattimo_knns(self, ts, top_k, pyattimo, process):
+        """Run one pyattimo motiflet discovery pass."""
+        n = ts.shape[-1] - self.m + 1
+        k_motiflet_distances = np.full((self.k_max, top_k), np.inf, dtype=np.float64)
         k_motiflet_candidates = np.empty(self.k_max, dtype=object)
 
         for i in range(len(k_motiflet_candidates)):
@@ -105,9 +127,9 @@ class SCAMPINearestNeighbors:
 
         # Prepare common arguments
         attimo_args = {
-            'ts': X.flatten(),
+            'ts': ts,
             'w': self.m,
-            'top_k': self.top_k,
+            'top_k': top_k,
             'support': self.k_max - 1,
             'exclusion_zone': int(self.m * self.slack),
             'max_memory': self.scampi_max_memory,
@@ -121,11 +143,6 @@ class SCAMPINearestNeighbors:
                 'fraction_threshold': np.log(n) / n
             })
 
-            # attimo_args.update({
-            #    'delta': self.scampi_delta,
-            #    'stop_on_threshold': False,
-            # })
-
             if self.verbose:
                 print(f"\tSCAMPI: Setting "
                       f"\n\t\tw={self.m}, "
@@ -134,17 +151,19 @@ class SCAMPINearestNeighbors:
                       f"\n\t\tmax_memory={attimo_args['max_memory']}, "
                       f"\n\t\texclusion_zone={attimo_args['exclusion_zone']}, "
                       f"\n\t\ttop_k={attimo_args['top_k']}, "
+                      f"\n\t\tscampi_top_n_strategy={self.scampi_top_n_strategy}, "
                       f"\n\t\tstop_on_threshold={attimo_args['stop_on_threshold']}, "
                       # f"\n\t\tfraction_threshold=log(n)/n", flush=True
                       , flush=True)
 
-        m_iter = pyattimo.MotifletsIterator(**attimo_args)
+        m_iter = None
 
         try:
+            m_iter = pyattimo.MotifletsIterator(**attimo_args)
+
             if self.verbose:
                 print("\tComputing scampi with SCAMPI...", flush=True)
 
-            ts = X.flatten()
             for mot in m_iter:
                 if self.verbose:
                     print(f"\t\t{mot}", flush=True)
@@ -174,8 +193,11 @@ class SCAMPINearestNeighbors:
                             motiflet = refined_motiflet
                             extent = refined_extent
 
-                    k_motiflet_distances[test_k][
-                        len(k_motiflet_candidates[test_k])] = extent
+                    rank = len(k_motiflet_candidates[test_k])
+                    if rank >= top_k:
+                        continue
+
+                    k_motiflet_distances[test_k][rank] = extent
 
                     # TODO: expose mot.lower_bound for confidence scores
                     k_motiflet_candidates[test_k].append(motiflet)
@@ -198,6 +220,82 @@ class SCAMPINearestNeighbors:
             del m_iter
 
         return k_motiflet_distances, k_motiflet_candidates, memory_usage
+
+    def _compute_masked_knns(self, ts, pyattimo, process):
+        """Run repeated top-1 pyattimo passes, masking each rank's elbows."""
+        from scampi.scampi import find_and_filter_elbow_points
+
+        k_motiflet_distances = np.full((self.k_max, self.top_k), np.inf, dtype=np.float64)
+        k_motiflet_candidates = np.empty(self.k_max, dtype=object)
+
+        for i in range(len(k_motiflet_candidates)):
+            k_motiflet_candidates[i] = []
+
+        timestamp_mask = np.zeros(ts.shape[-1], dtype=bool)
+        rng = np.random.default_rng(1234)
+        memory_usage = 0.0
+
+        rank_range = range(self.top_k)
+        if self.verbose:
+            try:
+                from tqdm.auto import tqdm
+                rank_range = tqdm(
+                    rank_range,
+                    total=self.top_k,
+                    desc="SCAMPI masked top-N",
+                )
+            except ImportError:
+                pass
+
+        for rank in rank_range:
+            if self.verbose:
+                print(f"\tSCAMPI masked top-N rank {rank + 1}/{self.top_k}", flush=True)
+
+            run_ts = _apply_timestamp_mask(
+                ts,
+                timestamp_mask,
+                self.m,
+                rng,
+            )
+            run_distances, run_candidates, run_memory = self._compute_pyattimo_knns(
+                run_ts, 1, pyattimo, process)
+            memory_usage = max(memory_usage, run_memory)
+
+            empty = np.array([], dtype=np.int32)
+            for k, candidates in enumerate(run_candidates):
+                k_motiflet_distances[k, rank] = run_distances[k, 0]
+                k_motiflet_candidates[k].append(candidates[0] if candidates else empty)
+
+            elbows = find_and_filter_elbow_points(
+                run_distances[:, 0],
+                run_candidates,
+                self.m,
+                rank=0,
+                filter=self.filter,
+                elbow_deviation=self.elbow_deviation,
+            )
+            for k in elbows[:1]:
+                for pos in run_candidates[k][0]:
+                    timestamp_mask[
+                        int(pos - 2 * self.m):int(pos + 3 * self.m)
+                    ] = True
+
+        return k_motiflet_distances, k_motiflet_candidates, memory_usage
+
+
+def _moving_average_fill(series, window):
+    ret = np.cumsum(series, dtype=float)
+    ret[window:] = ret[window:] - ret[:-window]
+    return ret / window
+
+
+def _apply_timestamp_mask(series, timestamp_mask, window, rng):
+    mask = timestamp_mask.astype(series.dtype, copy=False)
+    mavg = _moving_average_fill(series, window) * mask
+    noise = rng.normal(scale=np.abs(mavg), size=mask.shape) * mask
+    noise += mavg
+    reset_series = series * (1 - mask)
+    return reset_series + noise
 
 
 def compute_knn(ts, motiflet_seeds, m, k, slack=0.5):
