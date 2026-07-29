@@ -279,6 +279,7 @@ class SCAMPINearestNeighbors:
                     timestamp_mask[
                         int(pos - 2 * self.m):int(pos + 3 * self.m)
                     ] = True
+            print("masked timestamps:", np.sum(timestamp_mask))
 
         return k_motiflet_distances, k_motiflet_candidates, memory_usage
 
