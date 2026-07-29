@@ -63,7 +63,6 @@ AVAILABLE_METHODS = [
     "faiss-lsh",
     "faiss-ivf",
     "faiss-ivfpq",
-    "faiss-ivfpq-hnsw",
     "pynndescent",
     "annoy",
     "scalable",
@@ -178,7 +177,7 @@ def build_runs(args):
                 kwargs["faiss_nlist"] = nlist
             runs.append(BenchmarkRun(
                 label=(
-                    f"faiss IVF nlist={format_faiss_nlist(nlist)} "
+                    f"faiss IVF nlist={nlist or 'sqrt(n)'} "
                     f"nprobe={nprobe} "
                     f"search_radius={args.search_radius}"
                 ),
@@ -269,7 +268,7 @@ def build_pq_runs(faiss_index, args):
 
         runs.append(BenchmarkRun(
             label=(
-                f"faiss {faiss_index} nlist={format_faiss_nlist(nlist)} "
+                f"faiss {faiss_index} nlist={nlist or 'sqrt(n)'} "
                 f"nprobe={nprobe} pq_m={pq_m or 'auto'} "
                 f"pq_bits={pq_nbits} search_radius={args.search_radius}"
             ),
@@ -359,16 +358,8 @@ def parse_args():
                         default=[500])
     parser.add_argument("--faiss-efSearch", type=lambda v: parse_csv(v, int),
                         default=[400])
-    parser.add_argument(
-        "--faiss-nlist",
-        type=parse_optional_int_csv,
-        default=[None],
-        help=(
-            "Comma-separated IVF cell counts. Use 'auto' or leave unset to "
-            "let SCAMPI's FAISS wrapper set int(sqrt(n_windows)); FAISS does "
-            "not choose this value by itself."
-        ),
-    )
+    parser.add_argument("--faiss-nlist", type=parse_optional_int_csv,
+                        default=[None])
     parser.add_argument("--faiss-nprobe", type=lambda v: parse_csv(v, int),
                         default=[10])
     parser.add_argument("--faiss-nbits", type=lambda v: parse_csv(v, int),

@@ -199,6 +199,7 @@ class SCAMPI:
             plot_motifs_as_grid=True,
             plot_method_name=None,
             plot_ground_truth=None,
+            **kwargs,
     ):
         """Plots the elbow-plot for k-Motiflets.
 
@@ -226,6 +227,9 @@ class SCAMPI:
             plot_method_name: str, default=None
                 The name of the method to be plotted in the title when plotting
                 scampi as grid.
+            **kwargs
+                Additional search options, including scampi_top_n_strategy for the
+                SCAMPI backend.
 
             Returns
             -------
@@ -247,6 +251,8 @@ class SCAMPI:
         data = convert_to_2d(self.series)
         _, raw_data = pd_series_to_numpy(data)
 
+        search_kwargs = {**self.kwargs, **kwargs}
+
         self.dists, self.motiflets, self.elbow_points, _, self.memory_usage \
             = search_k_motiflets_elbow(
             k_max,
@@ -261,7 +267,7 @@ class SCAMPI:
             distance_preprocessing=self.distance_preprocessing,
             backend=self.backend,
             top_N=self.top_N,
-            **self.kwargs)
+            **search_kwargs)
 
         if plot_elbows:
             _plotting()._plot_elbow_points(
@@ -1270,8 +1276,34 @@ def filter_unique_across_ranks(elbow_points_per_rank, candidates, dists, motif_l
     return [np.array(sorted(rank_elbows), dtype=np.int32) for rank_elbows in filtered]
 
 
+def find_and_filter_elbow_points(
+        dists,
+        candidates,
+        motif_length,
+        rank=0,
+        filter=True,
+        alpha=2,
+        elbow_deviation=1.00,
+        smooth=True):
+    """Find elbow points and optionally filter overlapping motiflet candidates."""
+    elbow_points = find_elbow_points(
+        dists,
+        alpha=alpha,
+        elbow_deviation=elbow_deviation,
+        smooth=smooth,
+    )
+
+    if filter:
+        candidates_rank = np.empty(len(candidates), dtype=object)
+        for e in elbow_points:
+            candidates_rank[e] = candidates[e][rank]
+        elbow_points = filter_unique(elbow_points, candidates_rank, motif_length)
+
+    return elbow_points
+
+
 @njit(fastmath=True, cache=True)
-def find_elbow_points(dists, alpha=2, elbow_deviation=1.00):
+def find_elbow_points(dists, alpha=2, elbow_deviation=1.00, smooth=True):
     """Finds elbow-points in the elbow-plot (extent over each k).
 
     Parameters
@@ -1285,11 +1317,21 @@ def find_elbow_points(dists, alpha=2, elbow_deviation=1.00):
         The minimal absolute deviation needed to detect an elbow.
         It measures the absolute change in deviation from k to k+1.
         1.05 corresponds to 5% increase in deviation.
+    smooth : bool, default=True
+        Smooth the extent curve to make it monotonically increasing before
+        detecting elbows.
 
     Returns
     -------
     elbow_points : the elbow-points in the extent-function
     """
+    if smooth:
+        dists = dists.copy()
+        if len(dists) > 2:
+            dists[0:2] = dists[2]
+        for i in range(len(dists) - 1, 2, -1):
+            dists[i - 1] = np.minimum(dists[i], dists[i - 1])
+
     elbow_points = set()
     elbow_points.add(2)  # required for numba to have a type
     elbow_points.clear()
@@ -1535,6 +1577,9 @@ def search_k_motiflets_elbow(
         m : int
             best motif length
     """
+    if top_N < 1:
+        raise ValueError("top_N must be >= 1")
+
     n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
     previous_jobs = get_num_threads()
     set_num_threads(n_jobs)
@@ -1584,14 +1629,13 @@ def search_k_motiflets_elbow(
 
             backend = check_valid_backend(backend, data_raw, n)
 
-            # print(f"Using backend: {backend} for k-Motiflet search with motif length: {m}")
-            # print(f"Jobs used: {n_jobs}")
-
             if backend == "scampi":
                 backend_imlp = SCAMPINearestNeighbors(
                     m, k_max_,
                     top_k=top_N,
                     slack=slack,
+                    elbow_deviation=elbow_deviation,
+                    filter=filter,
                     **kwargs)
 
                 k_motiflet_distances, k_motiflet_candidates, memory_usage \
@@ -1658,23 +1702,16 @@ def search_k_motiflets_elbow(
                 'Use "scalable", "faiss", "pynndescent", "annoy", '
                 '"scampi", or "default".')
 
-        # smoothen the line to make it monotonically increasing
-        k_motiflet_distances[0:2] = k_motiflet_distances[2]
-        for i in range(len(k_motiflet_distances) - 1, 2, -1):
-            k_motiflet_distances[i - 1] = (
-                np.minimum(k_motiflet_distances[i], k_motiflet_distances[i - 1]))
-
         elbow_points = []
         for rank in range(top_N):
-            eb = find_elbow_points(
-                k_motiflet_distances[:, rank], elbow_deviation=elbow_deviation)
-
-            if filter:
-                candidates_rank = np.empty(len(k_motiflet_candidates), dtype=object)
-                for e in eb:
-                    candidates_rank[e] = k_motiflet_candidates[e][rank]
-                eb = filter_unique(eb, candidates_rank, m)
-
+            eb = find_and_filter_elbow_points(
+                k_motiflet_distances[:, rank],
+                k_motiflet_candidates,
+                m,
+                rank=rank,
+                filter=filter,
+                elbow_deviation=elbow_deviation,
+            )
             elbow_points.append(eb)
 
         return k_motiflet_distances, k_motiflet_candidates, elbow_points, m, memory_usage

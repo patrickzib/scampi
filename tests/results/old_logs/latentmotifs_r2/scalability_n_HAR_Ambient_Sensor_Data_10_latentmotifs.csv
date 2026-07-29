@@ -1,0 +1,5 @@
+length,motif length,backend,time in s,memory in MB,extent,motiflet,elbows
+1875227,512,LatentMotif,694.1758756637573,7629.421875,inf,[],-1
+1875227,1024,LatentMotif,1372.5239157676697,14977.03515625,inf,[],-1
+1875227,2048,LatentMotif,2771.555387020111,29603.24609375,inf,[],-1
+1875227,4096,LatentMotif,5555.2876496315,58823.64453125,inf,[],-1

@@ -702,7 +702,7 @@ def apply_exclusion_zone(X, m, D_lb, knns_lb, k, slack=0.5):
 
             # check if the position is not within some exclusion zone to a previously
             # chosen index
-            if (pos >= 0 and pos < n and
+            if (0 <= pos < n and
                     (not excluded[pos]) and
                     (not np.isnan(d)) and
                     (not np.isinf(d))):

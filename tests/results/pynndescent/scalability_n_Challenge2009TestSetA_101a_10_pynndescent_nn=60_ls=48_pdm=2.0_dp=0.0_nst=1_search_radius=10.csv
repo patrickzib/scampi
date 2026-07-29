@@ -1,0 +1,5 @@
+length,motif length,backend,time in s,memory in MB,extent,motiflet,elbows
+440001,512,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),442.17531514167786,8776.59375,1.2921954981011368,[200032 262904 177722 345249 193488 157718 181786 179946  99262],[array([2])]
+440001,1024,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),450.9446232318878,14092.00390625,32.435801691550296,[354822 417200 419634 353986 411580 418016 358035 437467 438313],[array([8])]
+440001,2048,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),515.3514416217804,21854.4375,242.37060161604813,[344467 192705 180636 175444 364937 189693 345950 347424 179162],[array([7])]
+440001,4096,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),1885.5001850128174,44847.7578125,1996.7487822498388,[145813 192430 171910 206476 128042 180744  26298 133138  12584],[array([7])]

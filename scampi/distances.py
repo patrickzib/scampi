@@ -69,11 +69,13 @@ def sliding_csum_dcsum(ts, m):
     """
     csum = np.concatenate((np.zeros(1, dtype=np.float64), np.cumsum(ts ** 2)))
 
-    dcsum = np.concatenate((np.zeros(1, dtype=np.float64),
-                            np.cumsum((ts[:-1] - ts[1:]) ** 2),
-                            np.zeros(1, dtype=np.float64)))
+    if m <= 1:
+        return csum[m:] - csum[:-m], np.zeros(len(ts) - m + 1, dtype=np.float64)
 
-    return csum[m:] - csum[:-m], dcsum[m:] - dcsum[:-m]
+    dcsum = np.concatenate((np.zeros(1, dtype=np.float64),
+                            np.cumsum((ts[:-1] - ts[1:]) ** 2)))
+
+    return csum[m:] - csum[:-m], dcsum[m - 1:] - dcsum[:-(m - 1)]
 
 
 @njit(fastmath=True, cache=True, nogil=True)
@@ -82,8 +84,14 @@ def complexity_invariant_distance(dot_rolled, n, m, preprocessing, order, halve_
     csumsq, ce = preprocessing
 
     ed = -2 * dot_rolled + csumsq + csumsq[order]
-    cf = np.maximum(ce, ce[order]) / np.minimum(ce, ce[order])
-    dist = ed * cf
+    dist = np.empty_like(dot_rolled)
+    for i in range(n):
+        min_ce = min(ce[i], ce[order])
+        if min_ce > 0:
+            cf = max(ce[i], ce[order]) / min_ce
+        else:
+            cf = 1.0
+        dist[i] = ed[i] * cf
 
     # self-join: exclusion zone
     start, end = (max(0, order - halve_m), min(order + halve_m, n))
@@ -96,7 +104,13 @@ def complexity_invariant_distance(dot_rolled, n, m, preprocessing, order, halve_
 
 @njit(fastmath=True, cache=True, nogil=True)
 def cosine_distance(dot_rolled, n, m, csumsq, order, halve_m):
-    dist = 1 - dot_rolled / (csumsq + csumsq[order])
+    dist = np.empty_like(dot_rolled)
+    denom = np.sqrt(csumsq * csumsq[order])
+    for i in range(n):
+        if denom[i] > 0:
+            dist[i] = 1 - dot_rolled[i] / denom[i]
+        else:
+            dist[i] = 1.0
 
     # self-join: exclusion zone
     start, end = (max(0, order - halve_m), min(order + halve_m, n))
@@ -179,7 +193,11 @@ def euclidean_distance_single(a, b, *args):
 
 @njit(fastmath=True, cache=True)
 def cosine_distance_single(a, b, a_i, b_j, preprocessing):
-    dist = 1 - np.dot(a, b) / (preprocessing[a_i] + preprocessing[b_j])
+    denom = np.sqrt(preprocessing[a_i] * preprocessing[b_j])
+    if denom > 0:
+        dist = 1 - np.dot(a, b) / denom
+    else:
+        dist = 1.0
     return dist
 
 
@@ -191,7 +209,11 @@ def complexity_invariant_distance_single(a, b, a_i, b_j, preprocessing):
     diff = (a - b)
     ed = np.dot(diff, diff)
 
-    cf = max(ce[a_i], ce[b_j]) / min(ce[a_i], ce[b_j])
+    min_ce = min(ce[a_i], ce[b_j])
+    if min_ce > 0:
+        cf = max(ce[a_i], ce[b_j]) / min_ce
+    else:
+        cf = 1.0
     dist = ed * cf
 
     return dist
