@@ -109,10 +109,15 @@ class SCAMPINearestNeighbors:
         process = psutil.Process(pid)
 
         ts = X.flatten()
-        if self.scampi_top_n_strategy == SCAMPI_TOP_N_MASK:
-            return self._compute_masked_knns(ts, pyattimo, process)
 
-        return self._compute_pyattimo_knns(ts, self.top_k, pyattimo, process)
+        # Use 'pyattimo' strategy as fallback
+        if self.scampi_top_n_strategy == SCAMPI_TOP_N_PYATTIMO:
+            return self._compute_pyattimo_knns(ts, self.top_k, pyattimo, process)
+
+        # And 'mask' by default
+        return self._compute_masked_knns(ts, pyattimo, process)
+
+
 
     def _compute_pyattimo_knns(self, ts, top_k, pyattimo, process):
         """Run one pyattimo motiflet discovery pass."""
