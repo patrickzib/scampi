@@ -1,23 +1,15 @@
-import sys
-from pathlib import Path
+import numpy as np
+import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BENCHMARKS_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
+from benchmarks.runners import common
 
-import matplotlib as mpl
-
-from benchmarks import utils as ut
-from scampi.scampi import *
-from scampi.plotting import *
-
-mpl.rcParams['figure.dpi'] = 150
-
-path = str(PROJECT_ROOT / "datasets" / "experiments") + "/"
+N_RANGE = [173_875]
+L_RANGE = [8192, 4096, 2048, 1024]
+SCAMPI_MAX_MEMORY = "2GB"
 
 
 def read_data(selection=None):
-    desc_filename = path + "pamap_desc.txt"
+    desc_filename = common.experiments_path("pamap_desc.txt")
     desc_file = []
 
     with open(desc_filename, 'r') as file:
@@ -29,7 +21,7 @@ def read_data(selection=None):
 
         (ts_name, window_size), change_points = row[:2], row[2:]
         if len(change_points) == 1 and change_points[0] == "\n": change_points = list()
-        ts = np.load(file=path + "pamap_data.npz")[ts_name]
+        ts = np.load(file=common.experiments_path("pamap_data.npz"))[ts_name]
 
         df.append(
             (ts_name, int(window_size), np.array([int(_) for _ in change_points]), ts))
@@ -45,31 +37,12 @@ def test_plot_data():
     ts = series
     print(f"Loaded dataset PAMAP with length {len(ts)}")
 
-    ml = SCAMPI(ds_name, ts)
-    points_to_plot = 10_000
-    ml.plot_dataset(
-        max_points=points_to_plot,
-        path="results/images/pamap_data.pdf")
+    common.plot_dataset(
+        lambda: (ds_name, ts), "results/images/pamap_data.pdf")
 
 
-def run_motiflets_scale_n(
-        backends=["scampi"],
-        delta=0.1,
-        k_max = 10,
-    ):
-    n_range = [173_875]
-    l_range = reversed([1024, 2048, 4096, 8192])
-
-    for backend in backends:
-        ut.test_motiflets_scale_n(
-            read_data,
-            n_range,
-            l_range,
-            k_max,
-            backend=backend,
-            scampi_delta=delta,
-            scampi_max_memory = "2GB"
-        )
+run_motiflets_scale_n = common.make_scale_n_runner(
+    read_data, N_RANGE, L_RANGE, SCAMPI_MAX_MEMORY)
 
 
 def main():

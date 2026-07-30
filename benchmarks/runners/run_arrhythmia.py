@@ -1,56 +1,26 @@
-import sys
-from pathlib import Path
+import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BENCHMARKS_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
+from benchmarks.runners import common
 
-from benchmarks import utils as ut
-from scampi.scampi import *
-from scampi.plotting import *
-
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['ps.fonttype'] = 42
-
-import matplotlib as mpl
-mpl.rcParams['figure.dpi'] = 150
-path = str(PROJECT_ROOT / "datasets" / "experiments") + "/"
+N_RANGE = [650_000]
+L_RANGE = [8192, 4096, 2048, 1024]
+SCAMPI_MAX_MEMORY = "2GB"
 
 
 def read_data():
-    series = pd.read_csv(path + "arrhythmia_subject231_channel0.csv")
+    series = pd.read_csv(
+        common.experiments_path("arrhythmia_subject231_channel0.csv"))
     ds_name = "Arrhythmia"
     print(f"Loaded dataset {ds_name} with length {series.shape}")
     return ds_name, series.iloc[:, 0].T
 
 
 def test_plot_data():
-    ds_name, series = read_data()
-    ml = SCAMPI(ds_name, series)
-    points_to_plot = 10_000
-    ml.plot_dataset(
-        max_points=points_to_plot,
-        path="results/images/arrhythmia_data.pdf")
+    common.plot_dataset(read_data, "results/images/arrhythmia_data.pdf")
 
 
-def run_motiflets_scale_n(
-        backends=["scampi"],
-        delta=0.1,
-        k_max = 10,
-):
-    n_range = [650_000]
-    l_range = reversed([1024, 2048, 4096, 8192])
-
-    for backend in backends:
-        ut.test_motiflets_scale_n(
-            read_data,
-            n_range,
-            l_range,
-            k_max,
-            backend=backend,
-            scampi_delta = delta,
-            scampi_max_memory="2GB"
-        )
+run_motiflets_scale_n = common.make_scale_n_runner(
+    read_data, N_RANGE, L_RANGE, SCAMPI_MAX_MEMORY)
 
 
 def main():

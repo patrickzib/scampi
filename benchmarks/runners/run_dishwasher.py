@@ -1,57 +1,19 @@
-import sys
-from pathlib import Path
+from benchmarks.runners import common
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BENCHMARKS_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
-
-from benchmarks import utils as ut
-from scampi.scampi import *
-from scampi.plotting import *
-
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['ps.fonttype'] = 42
-
-import matplotlib as mpl
-mpl.rcParams['figure.dpi'] = 150
-
-path = str(PROJECT_ROOT / "datasets" / "original") + "/"
+N_RANGE = [245_152]
+L_RANGE = [8192, 4096, 2048, 1024]
+SCAMPI_MAX_MEMORY = "2GB"
 
 def read_data():
-    file = 'dishwasher.txt'
-    ds_name = "Dishwasher"
-    series = pd.read_csv(path+file, header=None).squeeze('columns')
-    print(f"Loaded dataset {ds_name} with length {len(series)}")
-    return ds_name, series
+    return common.read_single_column_csv(
+        common.original_path("dishwasher.txt"), "Dishwasher")
 
 def test_plot_data():
-    ds_name, series = read_data()
-    ml = SCAMPI(ds_name, series)
-    points_to_plot = 10_000
-    ml.plot_dataset(
-        max_points=points_to_plot,
-        path="results/images/dishwasher_data.pdf")
+    common.plot_dataset(read_data, "results/images/dishwasher_data.pdf")
 
 
-def run_motiflets_scale_n(
-        backends=["scampi"],
-        delta=0.1,
-        k_max = 10,
-    ):
-    n_range = [245_152]
-    l_range = reversed([1024, 2048, 4096, 8192])
-
-
-    for backend in backends:
-        ut.test_motiflets_scale_n(
-            read_data,
-            n_range,
-            l_range,
-            k_max,
-            backend=backend,
-            scampi_delta=delta,
-            scampi_max_memory="2GB"
-        )
+run_motiflets_scale_n = common.make_scale_n_runner(
+    read_data, N_RANGE, L_RANGE, SCAMPI_MAX_MEMORY)
 
 
 def main():

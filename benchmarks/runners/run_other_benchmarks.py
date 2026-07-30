@@ -1,9 +1,4 @@
 import traceback
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PROJECT_ROOT))
 
 from benchmarks.runners import run_gap as gap
 from benchmarks.runners import run_pamap as pamap
@@ -14,12 +9,23 @@ from benchmarks.runners import run_eeg_physiodata as eeg
 from benchmarks.runners import run_arrhythmia as arrhythmia
 
 
-def run_safe(module, backends, delta, k_max, use_1m=None):
+BENCHMARKS = [
+    # (module, extra keyword arguments)
+    # (penguin, {"use_1m": False}),
+    # (astro, {}),
+    # (arrhythmia, {}),
+    # (dishwasher, {}),
+    # (eeg, {}),
+    # (gap, {}),
+    # (pamap, {}),
+    (penguin, {"use_1m": True}),
+]
+
+
+def run_safe(module, backends, delta, k_max, **kwargs):
     try:
-        if use_1m is not None:
-            module.run_motiflets_scale_n(backends=backends, delta=delta, use_1m=use_1m, k_max=k_max)
-        else:
-            module.run_motiflets_scale_n(backends=backends, delta=delta, k_max=k_max)
+        module.run_motiflets_scale_n(
+            backends=backends, delta=delta, k_max=k_max, **kwargs)
     except Exception as e:
         print(traceback.format_exc())
     except BaseException as e:
@@ -34,39 +40,8 @@ def main():
     for delta in deltas:
         for k_max in k_maxs:
             print(f"Using delta {delta}")
-
-            #run_safe(penguin, backends, delta, k_max, use_1m=False)
-            #run_safe(astro, backends, delta, k_max)
-            #run_safe(arrhythmia, backends, delta, k_max)
-            #run_safe(dishwasher, backends, delta, k_max)
-            #run_safe(eeg, backends, delta, k_max)
-            #run_safe(gap, backends, delta, k_max)
-            #run_safe(pamap, backends, delta, k_max)
-            run_safe(penguin, backends, delta, k_max, use_1m=True)
-
-
-    # backends = ["scalable"]  # , "scalable"
-    # subsamplings = [16, 8, 4, 2]
-    # for subsampling in subsamplings:
-    #     print(f"Using subsampling {subsampling}")
-    #     arrhythmia.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     astro.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     dishwasher.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     eeg.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     gap.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     pamap.run_motiflets_scale_n(backends=backends, subsampling=subsampling)
-    #     penguin.run_motiflets_scale_n(backends=backends, subsampling=subsampling, use_1m=True)
-    #     penguin.run_motiflets_scale_n(backends=backends, subsampling=subsampling, use_1m=False)
-
-    # backends = ["scalable"]
-    # penguin.run_motiflets_scale_n(backends=backends, use_1m=True)
-    # penguin.run_motiflets_scale_n(backends=backends, use_1m=False)
-    # astro.run_motiflets_scale_n(backends=backends)
-    # arrhythmia.run_motiflets_scale_n(backends=backends)
-    # dishwasher.run_motiflets_scale_n(backends=backends)
-    # eeg.run_motiflets_scale_n(backends=backends)
-    # gap.run_motiflets_scale_n(backends=backends)
-    # pamap.run_motiflets_scale_n(backends=backends)
+            for module, kwargs in BENCHMARKS:
+                run_safe(module, backends, delta, k_max, **kwargs)
 
 if __name__ == "__main__":
     main()
