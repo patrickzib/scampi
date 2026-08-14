@@ -103,6 +103,7 @@ class SCAMPI:
         self.elbow_deviation = elbow_deviation
         self.slack = slack
         self.ground_truth = ground_truth
+        self.top_N = None
 
         n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
         self.n_jobs = n_jobs
@@ -194,7 +195,7 @@ class SCAMPI:
             k_max,
             motif_length=None,  # if None, use best_motif_length
             filter=True,
-            top_N=1,
+            top_N=1,   # FIXME!!!
             plot_elbows=True,
             plot_motifs_as_grid=True,
             plot_method_name=None,
@@ -215,18 +216,18 @@ class SCAMPI:
             motif_length: int
                 the length of the motif (user parameter)
             filter: bool, default=True
-                filters overlapping motifsets from the result,
-            top_N : int, default=1
-                Number of best motifsets to return per k.
+                filters overlapping motif sets from the result,
+            top_N : int, default=None
+                Number of best motif sets to return per k.
             plot_elbows: bool, default=False
                 plots the elbow points into the plot
             plot_motifs_as_grid: bool, default=True
-                plot_plots the motifsets as grid into the plot
+                plot_plots the motif sets as grid into the plot
             plot_ground_truth: pd.Series (default=None)
                 Ground-truth information as pd.Series.
             plot_method_name: str, default=None
                 The name of the method to be plotted in the title when plotting
-                motifsets as grid.
+                motif sets as grid.
             **kwargs
                 Additional search options, including scampi_top_n_strategy for the
                 SCAMPI backend.
@@ -904,7 +905,7 @@ def get_radius(D_full, motifset_pos):
 
 @njit(fastmath=True, cache=True)
 def get_pairwise_extent(D_full, motifset_pos, upperbound=np.inf):
-    """Computes the extent of the motifset using pre-computed distances.
+    """Computes the extent of the motif set using pre-computed distances.
 
     Parameters
     ----------
@@ -945,7 +946,7 @@ def get_pairwise_extent(D_full, motifset_pos, upperbound=np.inf):
 def get_pairwise_extent_raw(
         series, motifset_pos, motif_length,
         distance_single, preprocessing, upperbound=np.inf):
-    """Computes the extent of the motifset via pairwise comparisons.
+    """Computes the extent of the motif set via pairwise comparisons.
 
     Parameters
     ----------
@@ -1088,15 +1089,15 @@ def get_approximate_k_motiflet(
     upper_bound : float
         Used for admissible pruning
     top_N : int
-        Number of best motifsets to return
+        Number of best motif sets to return
 
     Returns
     -------
     Tuple
         motiflet_candidates : np.array
-            The (approximate) best motifsets found
+            The (approximate) best motif sets found
         motiflet_dists:
-            The extents of the motifsets found
+            The extents of the motif sets found
         motiflet_all_candidates : np.array
             All candidates found during the search, with k-NNs for each subsequence
             in the time series. The first k elements are the k-NNs, the rest is -1.
@@ -1192,7 +1193,7 @@ def _check_unique(motifset_1, motifset_2, motif_length):
 
 
 def filter_unique(elbow_points, candidates, motif_length):
-    """Filters the list of candidate elbows for only the non-overlapping motifsets.
+    """Filters the list of candidate elbows for only the non-overlapping motif sets.
 
     This method applied a duplicate detection by filtering overlapping motif sets.
     Two candidate motif sets overlap, if at least m/2 subsequences of the smaller
@@ -1229,10 +1230,10 @@ def filter_unique(elbow_points, candidates, motif_length):
 
 
 def filter_unique_across_ranks(elbow_points_per_rank, candidates, dists, motif_length):
-    """Filters overlapping motifsets across multiple ranks.
+    """Filters overlapping motif sets across multiple ranks.
 
     The candidates are ordered by motifset size (k) descending, then distance ascending.
-    Overlapping motifsets are removed, keeping the first encountered candidate.
+    Overlapping motif sets are removed, keeping the first encountered candidate.
 
     Parameters
     ----------
@@ -1546,7 +1547,7 @@ def search_k_motiflets_elbow(
         It measures the absolute change in deviation from k to k+1.
         1.05 corresponds to 5% increase in deviation.
     filter: bool, default=True (user parameter)
-        filters overlapping motifsets from the result,
+        filters overlapping motif sets from the result,
     slack: float (default=0.5)
         Defines an exclusion zone around each subsequence to avoid trivial matches.
         Defined as percentage of m. E.g. 0.5 is equal to half the window length.
@@ -1562,7 +1563,7 @@ def search_k_motiflets_elbow(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
     top_N : int
-        Number of best motifsets to return per k.
+        Number of best motif sets to return per k.
 
     Returns
     -------
