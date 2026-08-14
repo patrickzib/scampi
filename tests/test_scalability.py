@@ -37,13 +37,13 @@ def test_motiflets_sparse():
     lengths = [
         #1_000,
         #5_000,
-        10_000,
-        30_000,
-        50_000,
-        100_000,
-        150_000,
-        200_000,
-        250_000
+        #10_000,
+        #30_000,
+        #50_000,
+        #100_000,
+        #150_000,
+        #200_000,
+        250_000     # this is where scampi is used
     ]
 
     ds_name, B = read_penguin_data()
@@ -62,17 +62,12 @@ def test_motiflets_sparse():
                     distance=distance,
                     n_jobs=-1,
                     backend=backend,
-                    scampi_max_memory="2GB"
+                    scampi_max_memory="1 GB"
                 )
 
                 k_max = 10
 
                 t_before = time.time()
-
-                length = ml.fit_motif_length(
-                   k_max,
-                   np.array([22, 50, 222], dtype=np.int32),
-                )
 
                 extent, motiflets, _ = ml.fit_k_elbow(
                     k_max,

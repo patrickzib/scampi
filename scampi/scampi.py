@@ -756,35 +756,6 @@ def compute_distances_with_knns_full(
     return D, knns
 
 
-@njit(fastmath=True, cache=True)
-def compute_upper_bound(
-        ts, D_knn, knns, k, m,
-        distance_single, preprocessing,
-):
-    kth_extent = np.zeros(k, dtype=np.float64)
-    kth_extent[0] = np.inf
-
-    for kk in range(1, len(kth_extent)):
-        # kk is the kk-th NN
-        # The motiflet candidate has thus kk+1 elements (including the query itself)
-        best_knn_pos = np.argmin(D_knn[:, kk])
-        candidate = knns[best_knn_pos, :kk + 1]
-        kth_extent[kk] = get_pairwise_extent_raw(
-            ts, candidate, m,
-            distance_single,
-            preprocessing)
-
-        # extent must be within the diameter of the sphere
-        kth_nn_min = np.min(D_knn[:, kk])
-        if kth_extent[kk] > 4 * kth_nn_min or kth_extent[kk] < kth_nn_min:
-            kth_extent[kk] = kth_nn_min
-
-        # assert kth_extent[kk] <= 4 * kth_nn_min
-        # assert kth_extent[kk] >= kth_nn_min
-
-    return kth_extent
-
-
 @njit(cache=True, parallel=True)
 def compute_distances_with_knns(
         time_series,
@@ -1080,7 +1051,6 @@ def get_approximate_k_motiflet(
         distance_single=None,
         preprocessing=None,
         use_D_full=True,
-        upper_bound=np.inf,
         top_N=None
 ):
     """Compute the approximate k-Motiflets.
@@ -1102,8 +1072,6 @@ def get_approximate_k_motiflet(
     use_D_full : bool
         If True, uses the full distance matrix D for computing the extent of the motiflet.
         If False, uses pairwise distances computed from the time series.
-    upper_bound : float
-        Used for admissible pruning
     top_N : int
         Search depth for this k: number of best non-overlapping motif sets to
         keep in the heap. This is not the final elbow-result limit used by
@@ -1702,20 +1670,16 @@ def search_k_motiflets_elbow(
 
                 preprocessing = compute_preprocessing(data_raw, distance_preprocessing, m)
 
-                upper_bound = np.inf
                 for test_k in np.arange(k_max_ - 1, 1, -1):
                     candidates, candidate_dists, _ = get_approximate_k_motiflet(
                         data_raw, m, test_k, D_full, knns,
                         distance_single=distance_single,
                         preprocessing=preprocessing,
                         use_D_full=(backend in ["default"]),
-                        upper_bound=upper_bound,
                         top_N=top_N,
                     )
-                    candidate_dist = candidate_dists[0]
                     k_motiflet_distances[test_k, :len(candidate_dists)] = candidate_dists
                     k_motiflet_candidates[test_k] = candidates
-                    upper_bound = min(candidate_dist, upper_bound)
 
                 del D_full
                 del knns
