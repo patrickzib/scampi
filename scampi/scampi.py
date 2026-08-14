@@ -195,7 +195,7 @@ class SCAMPI:
             k_max,
             motif_length=None,  # if None, use best_motif_length
             filter=True,
-            top_N=1,   # FIXME!!!
+            top_N=None,
             plot_elbows=True,
             plot_motifs_as_grid=True,
             plot_method_name=None,
@@ -218,7 +218,10 @@ class SCAMPI:
             filter: bool, default=True
                 filters overlapping motif sets from the result,
             top_N : int, default=None
-                Number of best motif sets to return per k.
+                Optional top-N mode. If None, preserves the original elbow-only
+                behavior: search one motif set per k and keep every motif set at
+                a found elbow. If set to N, search N motif sets per k, then limit
+                the flattened elbow result to N motif sets.
             plot_elbows: bool, default=False
                 plots the elbow points into the plot
             plot_motifs_as_grid: bool, default=True
@@ -252,6 +255,9 @@ class SCAMPI:
         _, raw_data = pd_series_to_numpy(data)
 
         search_kwargs = {**self.kwargs, **kwargs}
+        # top_N is an opt-in result limit. The default path still searches one
+        # motif set per k, but it does not cap the number of found elbows.
+        search_top_N = 1 if self.top_N is None else self.top_N
 
         self.dists, self.motiflets, self.elbow_points, _, self.memory_usage \
             = search_k_motiflets_elbow(
@@ -266,7 +272,7 @@ class SCAMPI:
             distance_single=self.distance_single,
             distance_preprocessing=self.distance_preprocessing,
             backend=self.backend,
-            top_N=self.top_N,
+            top_N=search_top_N,
             **search_kwargs)
 
         if plot_elbows:
@@ -284,7 +290,7 @@ class SCAMPI:
                     self.elbow_points,
                     self.dists,
                     motif_length,
-                    max_items=self.top_N if self.top_N > 1 else None,
+                    max_items=self.top_N,
                     method_name=plot_method_name,
                     show_elbows=False,
                     font_size=24,
@@ -346,6 +352,9 @@ class SCAMPI:
     def get_flattened_motifs(self, max_items=None):
         if self.dists is None or self.motiflets is None or self.elbow_points is None:
             raise Exception("Please call fit_k_elbow first.")
+
+        if max_items is None:
+            max_items = self.top_N
 
         return flatten_elbows(
             self.elbow_points,
@@ -435,11 +444,18 @@ def flatten_elbows(elbow_points, candidates, dists, max_items=None):
         for k in elbows:
             if candidates[k] is None:
                 continue
+            if rank >= len(candidates[k]):
+                continue
+            if np.isinf(dists[k, rank]) or np.isnan(dists[k, rank]):
+                continue
+            motifset = np.array(candidates[k][rank])
+            if motifset.size == 0 or np.all(motifset < 0):
+                continue
             items.append((k, rank, dists[k, rank]))
-
-    if max_items is not None:
-        items.sort(key=lambda item: (-item[0], item[2]))
-        items = items[:max_items]
+            if max_items is not None and len(items) >= max_items:
+                break
+        if max_items is not None and len(items) >= max_items:
+            break
 
     flat_candidates = []
     flat_dists = []
@@ -1065,7 +1081,7 @@ def get_approximate_k_motiflet(
         preprocessing=None,
         use_D_full=True,
         upper_bound=np.inf,
-        top_N=1
+        top_N=None
 ):
     """Compute the approximate k-Motiflets.
 
@@ -1089,7 +1105,9 @@ def get_approximate_k_motiflet(
     upper_bound : float
         Used for admissible pruning
     top_N : int
-        Number of best motif sets to return
+        Search depth for this k: number of best non-overlapping motif sets to
+        keep in the heap. This is not the final elbow-result limit used by
+        SCAMPI.fit_k_elbow.
 
     Returns
     -------
@@ -1240,7 +1258,7 @@ def filter_unique_across_ranks(elbow_points_per_rank, candidates, dists, motif_l
     elbow_points_per_rank : list of array-like
         List of elbow points for each rank.
     candidates : array-like
-        Motifset candidates for each k. Each entry is (top_N, k) if top_N > 1.
+        Motif set candidates for each k. Each entry is (top_N, k) if top_N > 1.
     dists : array-like
         Distances for each k and rank, shape (k_max, top_N).
     motif_length : int
@@ -1516,7 +1534,7 @@ def search_k_motiflets_elbow(
         distance_single=znormed_euclidean_distance_single,
         distance_preprocessing=sliding_mean_std,
         backend="default",
-        top_N=1,
+        top_N=None,
         **kwargs
 ):
     """Computes the elbow-function.
@@ -1563,7 +1581,10 @@ def search_k_motiflets_elbow(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
     top_N : int
-        Number of best motif sets to return per k.
+        Search depth per k. If None, it is normalized to 1 for backward
+        compatibility with elbow-only search. Explicit values greater than 1
+        allocate that many candidates per k so callers can later select a
+        top-N subset from the found elbows.
 
     Returns
     -------
@@ -1577,9 +1598,6 @@ def search_k_motiflets_elbow(
         m : int
             best motif length
     """
-    if top_N < 1:
-        raise ValueError("top_N must be >= 1")
-
     n_jobs = os.cpu_count() if n_jobs < 1 else n_jobs
     previous_jobs = get_num_threads()
     set_num_threads(n_jobs)
@@ -1615,6 +1633,11 @@ def search_k_motiflets_elbow(
             raise ValueError("motif_length must be > 0")
         if slack <= 0:
             raise ValueError("slack must be > 0")
+
+        if top_N is None:
+            top_N = 1
+        elif not isinstance(top_N, (int, np.integer)) or top_N < 1:
+            raise ValueError("top_N must be a positive integer or None")
 
         # non-overlapping motifs only
         n = data_raw.shape[-1] - m + 1
