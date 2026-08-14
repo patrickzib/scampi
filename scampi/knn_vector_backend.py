@@ -7,6 +7,7 @@ from warnings import simplefilter
 import numpy as np
 import psutil
 from numba import set_num_threads, njit, prange, get_num_threads
+
 from scampi.distances import znormed_euclidean_distance_single, sliding_mean_std
 
 simplefilter(action="ignore", category=FutureWarning)

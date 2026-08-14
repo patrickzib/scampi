@@ -1,7 +1,7 @@
 import os
-import psutil
-import numpy as np
 
+import numpy as np
+import psutil
 
 SCAMPI_TOP_N_PYATTIMO = "pyattimo"
 SCAMPI_TOP_N_MASK = "mask"

@@ -14,7 +14,6 @@ from scipy.stats import zscore
 from tsdownsample import MinMaxLTTBDownsampler
 
 import scampi.scampi as ml
-from scampi.distances import *
 
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -390,7 +389,6 @@ def _plot_elbow_points(
     ax.set(xlabel='Size (k)', ylabel='Extent')
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
-    # scampi = motifset_candidates[ebs][0]
     motiflets = [motifset_candidates[eb][0] for eb in ebs]
     for i, motiflet in enumerate(motiflets):
         if motiflet is not None:

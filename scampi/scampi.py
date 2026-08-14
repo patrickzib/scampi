@@ -5,8 +5,8 @@
 
 __author__ = ["patrickzib"]
 
-import os
 import logging
+import os
 from ast import literal_eval
 from os.path import exists
 from pathlib import Path
@@ -164,7 +164,7 @@ class SCAMPI:
         index, data_raw = pd_series_to_numpy(self.series)
 
         header = " in " + self.series.index.name if isinstance(
-            self.series, pd.Series) and self.series.index.name != None else ""
+            self.series, pd.Series) and self.series.index.name is not None else ""
 
         # discretizes ranges
         motif_length_range = np.int32(motif_length_range)
@@ -215,18 +215,18 @@ class SCAMPI:
             motif_length: int
                 the length of the motif (user parameter)
             filter: bool, default=True
-                filters overlapping scampi from the result,
+                filters overlapping motifsets from the result,
             top_N : int, default=1
-                Number of best scampi to return per k.
+                Number of best motifsets to return per k.
             plot_elbows: bool, default=False
-                plots the elbow ploints into the plot
+                plots the elbow points into the plot
             plot_motifs_as_grid: bool, default=True
-                plot_plots the scampi as grid into the plot
+                plot_plots the motifsets as grid into the plot
             plot_ground_truth: pd.Series (default=None)
                 Ground-truth information as pd.Series.
             plot_method_name: str, default=None
                 The name of the method to be plotted in the title when plotting
-                scampi as grid.
+                motifsets as grid.
             **kwargs
                 Additional search options, including scampi_top_n_strategy for the
                 SCAMPI backend.
@@ -244,8 +244,7 @@ class SCAMPI:
 
         if motif_length is None:
             motif_length = self.motif_length
-        else:
-            self.motif_length = motif_length
+        self.motif_length = motif_length
 
         # turn into 2d array
         data = convert_to_2d(self.series)
@@ -567,9 +566,9 @@ def pd_series_to_numpy(data):
         data_raw = data
         data_index = np.arange(data.shape[-1])
     try:
-        return (data_index.astype(np.float64), data_raw.astype(np.float64, copy=False))
+        return data_index.astype(np.float64), data_raw.astype(np.float64, copy=False
     except TypeError:  # datetime index cannot be cast to float64
-        return (data_index, data_raw.astype(np.float64, copy=False))
+        return data_index, data_raw.astype(np.float64, copy=False)
 
 
 def read_dataset(dataset, sampling_factor=10000):
@@ -1089,15 +1088,15 @@ def get_approximate_k_motiflet(
     upper_bound : float
         Used for admissible pruning
     top_N : int
-        Number of best scampi to return
+        Number of best motifsets to return
 
     Returns
     -------
     Tuple
         motiflet_candidates : np.array
-            The (approximate) best scampi found
+            The (approximate) best motifsets found
         motiflet_dists:
-            The extents of the scampi found
+            The extents of the motifsets found
         motiflet_all_candidates : np.array
             All candidates found during the search, with k-NNs for each subsequence
             in the time series. The first k elements are the k-NNs, the rest is -1.
@@ -1547,7 +1546,7 @@ def search_k_motiflets_elbow(
         It measures the absolute change in deviation from k to k+1.
         1.05 corresponds to 5% increase in deviation.
     filter: bool, default=True (user parameter)
-        filters overlapping scampi from the result,
+        filters overlapping motifsets from the result,
     slack: float (default=0.5)
         Defines an exclusion zone around each subsequence to avoid trivial matches.
         Defined as percentage of m. E.g. 0.5 is equal to half the window length.
@@ -1563,7 +1562,7 @@ def search_k_motiflets_elbow(
         Use 'default' for the original exact implementation with excessive memory,
         Use 'scalable' for a scalable, exact implementation with less memory,
     top_N : int
-        Number of best scampi to return per k.
+        Number of best motifsets to return per k.
 
     Returns
     -------
