@@ -10,8 +10,7 @@ def test_motiflet_top_k():
     ml = SCAMPI(
         ds_name,
         series,
-        df_gt,
-        scampi_max_memory="1GB"
+        df_gt
     )
     ml.plot_dataset()
 
