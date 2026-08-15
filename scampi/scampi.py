@@ -363,28 +363,6 @@ class SCAMPI:
             max_items=max_items)
 
 
-def as_series(data, index_range, index_name):
-    """Converts a time series to a series with an index.
-
-    Parameters
-    ----------
-    data : array-like
-        The time series raw data as numpy array
-    index_range :
-        The index to use
-    index_name :
-        The name of the index to use (e.g. time)
-
-    Returns
-    -------
-    series : PD.Series
-
-    """
-    series = pd.Series(data=data, index=index_range)
-    series.index.name = index_name
-    return series
-
-
 def resample(data, sampling_factor=10000):
     """Resamples a time series to roughly `sampling_factor` points.
 
@@ -861,36 +839,6 @@ def compute_distances_with_knns(
 
 
 @njit(fastmath=True, cache=True)
-def get_radius(D_full, motifset_pos):
-    """Computes the radius of the passed motif set (motiflet).
-
-    Parameters
-    ----------
-    D_full : 2d array-like
-        The distance matrix
-    motifset_pos : array-like
-        The motif set start-offsets
-
-    Returns
-    -------
-    motiflet_radius : float
-        The radius of the motif set
-    """
-    motiflet_radius = np.inf
-
-    for ii in range(len(motifset_pos) - 1):
-        i = motifset_pos[ii]
-        current = np.float64(0.0)
-        for jj in range(0, len(motifset_pos)):
-            if ii != jj:
-                j = motifset_pos[jj]
-                current = max(current, D_full[i, j])
-        motiflet_radius = min(current, motiflet_radius)
-
-    return motiflet_radius
-
-
-@njit(fastmath=True, cache=True)
 def get_pairwise_extent(D_full, motifset_pos, upperbound=np.inf):
     """Computes the extent of the motif set using pre-computed distances.
 
@@ -1213,53 +1161,6 @@ def filter_unique(elbow_points, candidates, motif_length):
             filtered_ebp.append(elbow_points[i])
 
     return np.array(filtered_ebp)
-
-
-def filter_unique_across_ranks(elbow_points_per_rank, candidates, dists, motif_length):
-    """Filters overlapping motif sets across multiple ranks.
-
-    The candidates are ordered by motifset size (k) descending, then distance ascending.
-    Overlapping motif sets are removed, keeping the first encountered candidate.
-
-    Parameters
-    ----------
-    elbow_points_per_rank : list of array-like
-        List of elbow points for each rank.
-    candidates : array-like
-        Motif set candidates for each k. Each entry is (top_N, k) if top_N > 1.
-    dists : array-like
-        Distances for each k and rank, shape (k_max, top_N).
-    motif_length : int
-        Length of the motifs, needed for checking overlaps.
-
-    Returns
-    -------
-    filtered_elbows : list of np.array
-        Filtered elbow points for each rank.
-    """
-    filtered = [[] for _ in range(len(elbow_points_per_rank))]
-    items = []
-
-    for rank, elbows in enumerate(elbow_points_per_rank):
-        for k in elbows:
-            if k < len(candidates):
-                items.append((int(k), float(dists[k, rank]), rank))
-
-    items.sort(key=lambda item: (-item[0], item[1]))
-
-    accepted = []
-    for k, _, rank in items:
-        motifset = candidates[k][rank]
-        unique = True
-        for acc_rank, acc_k in accepted:
-            if not _check_unique(motifset, candidates[acc_k][acc_rank], motif_length):
-                unique = False
-                break
-        if unique:
-            filtered[rank].append(k)
-            accepted.append((rank, k))
-
-    return [np.array(sorted(rank_elbows), dtype=np.int32) for rank_elbows in filtered]
 
 
 def find_and_filter_elbow_points(

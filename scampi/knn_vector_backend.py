@@ -13,8 +13,6 @@ from scampi.distances import znormed_euclidean_distance_single, sliding_mean_std
 simplefilter(action="ignore", category=FutureWarning)
 simplefilter(action="ignore", category=UserWarning)
 
-STD_THRESHOLD = 1e-8
-
 index_strategies = [
     "faiss",
     "annoy",
@@ -348,22 +346,6 @@ class VectorSearchNearestNeighbors:
                     f"Available strategies: {index_strategies}"
                 )
 
-            if self.index_strategy not in ["faiss", "annoy", "pynndescent"]:
-                # Post-process the results to filter out distances and neighbors
-                if self.verbose:
-                    print("    Applying exclusion zone")
-
-                D, knns = restore_original_indices(D, knns, permutation)
-                D_exact, knns_exact = apply_exclusion_zone(
-                    X,
-                    self.m,  # :window_size
-                    D,
-                    knns,
-                    self.k,
-                    slack=self.slack
-                )
-                complete_rows = np.sum(np.all(knns_exact >= 0, axis=1))
-
             if self.verbose:
                 #print(f"    First neighbors: {knns_exact[0]}")
                 #print(f"    Last neighbors:  {knns_exact[-1]}")
@@ -608,16 +590,6 @@ class VectorSearchNearestNeighbors:
         while d % mm != 0:
             mm -= 1
         return mm, nbits
-
-
-@njit(fastmath=True, cache=True)
-def make_windows(X, window_size, n_chunks, chunk_size):
-    """Create fixed-size windows by stepping through ``X`` in chunks."""
-    X_windows = np.full((n_chunks, window_size), np.inf, dtype=X.dtype)
-    for i in range(n_chunks):
-        start = i * chunk_size
-        X_windows[i] = X[start:start + window_size]
-    return X_windows
 
 
 def znorm_windows(X, window_size):
