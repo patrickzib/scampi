@@ -33,8 +33,7 @@ experiments used in the evaluation.
 
 ## SCAMPI (SCalable Anytime Mining of Patterns In time series)
 
-This paper introduces SCAMPI 
-(scalable Anytime Mining of Pat terns under Euclidean Distance). 
+This paper introduces SCAMPI. 
 
 ## Installation
 
