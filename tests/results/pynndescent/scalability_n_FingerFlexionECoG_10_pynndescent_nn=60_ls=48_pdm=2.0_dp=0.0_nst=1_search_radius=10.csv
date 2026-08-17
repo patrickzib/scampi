@@ -3,3 +3,5 @@ length,motif length,backend,time in s,memory in MB,extent,motiflet,elbows
  20921921]",[array([2])]
 23999997,1024,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),61753.33184027672,668929.9765625,0.0,"[22411771 16377051 16411291 23413211 16222011 17257691 23702491 22815291
  23044891]",[array([2])]
+23999997,2048,pynndescent (n_neighbors=60;leaf_size=48;pruning_degree_multiplier=2.0;diversify_prob=0.0;n_search_trees=1;search_radius=10),67997.57080841064,1147144.44921875,0.0,"[22360798 15544638 15081118 15239358 22740958 14905918 12584638 12762078
+ 15514238]",[array([2])]
