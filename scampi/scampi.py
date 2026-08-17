@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compute k-Motiflets.
+"""Compute k-Motiflets using SCAMPI.
 
 """
 
@@ -150,6 +150,8 @@ class SCAMPI:
                 the interval of lengths
             subsample: int (default=2)
                 the subsample factor
+            plot : bool (default: True)
+                whether to plot the AU-EF over motif lengths
 
             Returns
             -------
@@ -204,8 +206,8 @@ class SCAMPI:
     ):
         """Plots the elbow-plot for k-Motiflets.
 
-            This is the method to find and plot the characteristic k-Motiflets within range
-            [2...k_max] for given a `motif_length` using elbow-plots.
+            This is the method to find and plot the characteristic k-Motiflets within
+            range [2...k_max] for given a `motif_length` using elbow-plots.
 
             Details are given within the paper Section 5.1 Learning meaningful k.
 
@@ -239,7 +241,7 @@ class SCAMPI:
             -------
             Tuple
                 dists:          distances for each k in [2...k_max]
-                candidates:     motifset-candidates for each k
+                candidates:     motif set-candidates for each k
                 elbow_points:   elbow-points
 
             """
@@ -261,19 +263,19 @@ class SCAMPI:
 
         self.dists, self.motiflets, self.elbow_points, _, self.memory_usage \
             = search_k_motiflets_elbow(
-            k_max,
-            raw_data,
-            motif_length,
-            n_jobs=self.n_jobs,
-            elbow_deviation=self.elbow_deviation,
-            slack=self.slack,
-            filter=filter,
-            distance=self.distance,
-            distance_single=self.distance_single,
-            distance_preprocessing=self.distance_preprocessing,
-            backend=self.backend,
-            top_N=search_top_N,
-            **search_kwargs)
+                k_max,
+                raw_data,
+                motif_length,
+                n_jobs=self.n_jobs,
+                elbow_deviation=self.elbow_deviation,
+                slack=self.slack,
+                filter=filter,
+                distance=self.distance,
+                distance_single=self.distance_single,
+                distance_preprocessing=self.distance_preprocessing,
+                backend=self.backend,
+                top_N=search_top_N,
+                **search_kwargs)
 
         if plot_elbows:
             _plotting()._plot_elbow_points(
@@ -993,16 +995,25 @@ def _argknn(
     return np.array(idx, dtype=np.int32)
 
 
+@njit(cache=True)
+def _is_valid_candidate(idx, n):
+    for i in np.arange(len(idx)):
+        if idx[i] < 0 or idx[i] >= n:
+            return False
+    return True
+
+
 @njit(cache=True, parallel=True)
 def _compute_candidate_extents_chunk(
         ts, m, k, D, knns, best_order, start, end,
         distance_single, preprocessing, use_D_full, bound_check):
     extents = np.full(end - start, np.inf, dtype=np.float64)
+    n = knns.shape[0]
 
     for pos in prange(start, end):
         order = best_order[pos]
         idx = knns[order, :k]
-        if len(idx) >= k and idx[-1] >= 0:
+        if _is_valid_candidate(idx, n):
             if use_D_full:
                 extents[pos - start] = get_pairwise_extent(D, idx, bound_check)
             else:
@@ -1014,7 +1025,9 @@ def _compute_candidate_extents_chunk(
 
 @njit(cache=True)
 def _merge_candidate_into_heap(heap, idx, motiflet_extent, bound_check, top_N, m):
-    if motiflet_extent <= bound_check:
+    if (not np.isnan(motiflet_extent)
+            and not np.isinf(motiflet_extent)
+            and motiflet_extent <= bound_check):
         # Search for overlap - if there is just a single overlap, replace the
         # motiflet with the largest distance in the heap.
         overlap_pos = []
@@ -1056,7 +1069,8 @@ def get_approximate_k_motiflet(
     knns: 2d array-like
         The k-NNs for each subsequence
     use_D_full : bool
-        If True, uses the full distance matrix D for computing the extent of the motiflet.
+        If True, uses the full distance matrix D for computing the extent of the
+        motif set.
         If False, uses pairwise distances computed from the time series.
     top_N : int
         Search depth for this k: number of best non-overlapping motif sets to
@@ -1109,25 +1123,6 @@ def get_approximate_k_motiflet(
             # and the next k-NN will have a larger distance.
             break
 
-        if heap.size < top_N:
-            idx = knns[order, :k]
-            motiflet_all_candidates[pos, :min(k, len(idx))] = idx
-
-            if len(idx) >= k and idx[-1] >= 0:
-                if use_D_full:
-                    # get_pairwise_extent requires the full distance matrix
-                    motiflet_extent = get_pairwise_extent(D, idx, bound_check)
-                else:
-                    # get_pairwise_extent_raw does pairwise comparisons
-                    motiflet_extent = get_pairwise_extent_raw(
-                        ts, idx, m, distance_single, preprocessing, bound_check)
-
-                _merge_candidate_into_heap(
-                    heap, idx, motiflet_extent, bound_check, top_N, m)
-
-            pos += 1
-            continue
-
         end = min(pos + chunk_size, len(best_order))
         for chunk_pos in np.arange(pos, end):
             if knn_distances[best_order[chunk_pos]] > bound_check:
@@ -1144,9 +1139,10 @@ def get_approximate_k_motiflet(
         for chunk_pos in np.arange(pos, end):
             order = best_order[chunk_pos]
             idx = knns[order, :k]
-            motiflet_all_candidates[chunk_pos, :min(k, len(idx))] = idx
-            _merge_candidate_into_heap(
-                heap, idx, extents[chunk_pos - pos], bound_check, top_N, m)
+            if _is_valid_candidate(idx, n):
+                motiflet_all_candidates[chunk_pos, :] = idx
+                _merge_candidate_into_heap(
+                    heap, idx, extents[chunk_pos - pos], bound_check, top_N, m)
 
         pos = end
 
@@ -1158,7 +1154,7 @@ def get_approximate_k_motiflet(
 def _check_unique(motifset_1, motifset_2, motif_length):
     """Check for overlaps between two motif sets.
 
-    Two motif sets overlapp, if more than m/2 subsequences overlap from motifset 1.
+    Two motif sets overlapp, if more than m/2 subsequences overlap from motif set 1.
 
     Parameters
     ----------
@@ -1174,8 +1170,8 @@ def _check_unique(motifset_1, motifset_2, motif_length):
     True, if there are at least m/2 subsequences with an overlap of 25%, else False.
     """
     count = 0
-    for a in motifset_1:  # smaller motiflet
-        for b in motifset_2:  # larger motiflet
+    for a in motifset_1:  # smaller motif set
+        for b in motifset_2:  # larger motif set
             if abs(a - b) < (motif_length / 4):
                 count = count + 1
                 break
@@ -1190,7 +1186,7 @@ def filter_unique(elbow_points, candidates, motif_length):
 
     This method applied a duplicate detection by filtering overlapping motif sets.
     Two candidate motif sets overlap, if at least m/2 subsequences of the smaller
-    motifset overlapp with the larger motifset. Only the largest non-overlapping
+    motif set overlapp with the larger motif set. Only the largest non-overlapping
     motif sets are retained.
 
     Parameters
@@ -1231,7 +1227,7 @@ def find_and_filter_elbow_points(
         alpha=2,
         elbow_deviation=1.00,
         smooth=True):
-    """Find elbow points and optionally filter overlapping motiflet candidates."""
+    """Find elbow points and optionally filter overlapping motif set candidates."""
     elbow_points = find_elbow_points(
         dists,
         alpha=alpha,
@@ -1292,7 +1288,6 @@ def find_elbow_points(dists, alpha=2, elbow_deviation=1.00, smooth=True):
             m2 = (dists[i] - dists[i - 1]) + 0.00001
 
             # avoid detecting elbows in near constant data
-            # TODO adding this removes reproducability
             # if dists[i - 1] == dists[i]:
             #    m2 = 1.0  # peaks[i] = 0
 
@@ -1361,7 +1356,7 @@ def find_au_ef_motif_length(
     -------
     Tuple
         minimum : array-like
-            The minumum found
+            The minimum found
         all_minima : array-like
             All local minima found
         au_efs : array-like
@@ -1369,7 +1364,7 @@ def find_au_ef_motif_length(
         elbows :
             Largest k (largest elbow) found
         top_motiflets :
-            The motiflet for the largest k for each length.
+            The motif set for the largest k for each length.
 
     """
     # apply sampling for speedup only
@@ -1515,7 +1510,7 @@ def search_k_motiflets_elbow(
         allocate that many candidates per k so callers can later select a
         top-N subset from the found elbows.
     motiflet_chunk_size : int, default=256
-        Number of lower-bound-sorted motiflet candidates to evaluate per
+        Number of lower-bound-sorted motif set candidates to evaluate per
         parallel extent-computation chunk.
 
     Returns
@@ -1524,7 +1519,7 @@ def search_k_motiflets_elbow(
         dists :
             distances for each k in [2...k_max]
         candidates :
-            motifset-candidates for each k
+            motif set-candidates for each k
         elbow_points :
             elbow-points per rank when top_N > 1
         m : int
