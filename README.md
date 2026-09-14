@@ -41,7 +41,7 @@ The easiest is to use pip to install motiflets.
 
 ### a) Install using pip
 ```
-BLINDED
+pip install scampi
 ```
 
 You can also install  the project from source.
