@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Distances used in LAMA
-"""
+"""Distance functions and preprocessing used by SCAMPI motif discovery."""
 
 __author__ = ["patrickzib"]
 
@@ -252,29 +251,27 @@ _DISTANCE_MAPPING = {
 
 
 def map_distances(distance_name):
-    """
-    Computes and returns the distance function and its corresponding preprocessing function, given a distance name.
+    """Resolve a distance name to its preprocessing and distance functions.
 
-    Parameters:
-    -----------
-    distance_name: str
-        The name of the distance function to be computed. Available options are "znormed_euclidean_distance"
-        and "euclidean_distance".
+    Parameters
+    ----------
+    distance_name : str
+        One of "znormed_ed", "znormed_euclidean", "ed", "euclidean",
+        "cosine", "CID", or "cid". Names are case-sensitive.
 
-    Returns:
-    --------
-    tuple:
-        A tuple containing two functions - the preprocessing function and the distance function.
-        The preprocessing function takes in a time series and the window size. The distance function takes in
-        the index of the subsequence, the dot product between the subsequence and all other subsequences,
-        the window size, the preprocessing output, and a boolean flag indicating whether to compute the
-        squared distance. It returns the distance between the two subsequences.
-
-    Raises:
+    Returns
     -------
-    ValueError:
-        If `distance_name` is not a valid distance function name. Valid options are "znormed_euclidean_distance"
-        and "euclidean_distance".
+    preprocessing : callable
+        Computes sliding statistics for a time series and window length.
+    distance : callable
+        Computes a distance profile using sliding dot products and statistics.
+    distance_single : callable
+        Computes the distance between two subsequences.
+
+    Raises
+    ------
+    ValueError
+        If the name is not registered in ``_DISTANCE_MAPPING``.
     """
     if distance_name not in _DISTANCE_MAPPING:
         raise ValueError(

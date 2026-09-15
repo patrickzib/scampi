@@ -45,6 +45,7 @@ def _plotting():
 
 
 class SCAMPI:
+    """Discover recurring motif sets and select motif lengths and set sizes."""
 
     def __init__(
             self,
@@ -58,46 +59,52 @@ class SCAMPI:
             backend="default",
             **kwargs
     ):
-        """Computes the AU_EF plot to extract the best motif lengths
+        """Configure motif discovery for a time series.
 
-            This is the method to find and plot the characteristic motif-lengths, for k in
-            [2...k_max], using the area AU-EF plot.
+        Parameters
+        ----------
+        ds_name : str
+            Dataset name used in plot titles.
+        series : numpy.ndarray, pandas.Series, or pandas.DataFrame
+            Numeric time series. Use shape (n_samples,) for univariate arrays
+            or (n_dimensions, n_samples) for arrays and DataFrames. DataFrame
+            columns represent sample positions; rows represent dimensions.
+        ground_truth : pandas.Series or None, default=None
+            Ground-truth annotations used by ``plot_dataset``. To annotate
+            fitting plots, pass ``plot_ground_truth`` to ``fit_k_elbow``.
+        elbow_deviation : float, default=1.00
+            Required ratio of extent at k+1 to extent at k for elbow detection.
+            A value of 1.05 requires an increase greater than 5 percent.
+        distance : str, default="znormed_ed"
+            Distance name: "znormed_ed" or "znormed_euclidean", "ed" or
+            "euclidean", "cosine", or "CID"/"cid". SCAMPI and vector-search
+            backends use z-normalized Euclidean distances internally.
+        slack : float, default=0.5
+            Positive exclusion-zone factor used to avoid trivial matches.
+            A value of 0.5 excludes half a motif length around a subsequence.
+        n_jobs : int, default=-1
+            Thread count for distance and vector-search computations. Values
+            below 1 use ``os.cpu_count()``. This is not forwarded to pyattimo.
+        backend : str, default="default"
+            "default" computes a full distance matrix; "scalable" uses a
+            smaller representation. "scampi", "faiss", "annoy", and
+            "pynndescent" use approximate discovery and require univariate
+            input. Backend selection can change automatically for large
+            inputs; see ``check_valid_backend``.
+        **kwargs
+            Backend options forwarded to the search. For "scampi", these
+            include ``scampi_delta`` (float or None, default 0.1),
+            ``scampi_max_memory`` (str, default "2 GB"),
+            ``scampi_exact_refine`` (bool, default False), and
+            ``scampi_top_n_strategy`` ("pyattimo" or "mask", default
+            "pyattimo"). See ``SCAMPINearestNeighbors`` and
+            ``VectorSearchNearestNeighbors`` for backend-specific options.
 
-            Details are given within the paper 5.2 Learning Motif Length l.
-
-            Parameters
-            ----------
-            ds_name: String
-                Name of the time series for displaying
-            series: array-like
-                the TS
-            ground_truth: pd.Series
-                Ground-truth information as pd.Series.
-            elbow_deviation : float, default=1.00
-                The minimal absolute deviation needed to detect an elbow.
-                It measures the absolute change in deviation from k to k+1.
-                1.05 corresponds to 5% increase in deviation.
-            distance: str (default="znormed_ed")
-                The name of the distance function to be computed.
-                Available options are:
-                    - 'znormed_ed' or 'znormed_euclidean' for z-normalized ED
-                    - 'ed' or 'euclidean' for the "normal" ED.
-            slack: float
-                Defines an exclusion zone around each subsequence to avoid trivial matches.
-                Defined as percentage of m. E.g. 0.5 is equal to half the window length.
-            n_jobs : int
-                Number of jobs to be used.
-            backend : String, default="default"
-                The backend to use. As of now 'scalable', 'scampi' and 'default' are supported.
-                Use 'default' for the original exact implementation with excessive memory,
-                Use 'scalable' for a scalable, exact implementation with less memory,
-                Use 'scampi' for a fast, scalable but approximate implementation.
-
-            Returns
-            -------
-            best_motif_length: int
-                The motif length that maximizes the AU-EF.
-            """
+        Notes
+        -----
+        Construction stores configuration; call ``fit_motif_length`` or
+        ``fit_k_elbow`` to run discovery.
+        """
         self.ds_name = ds_name
         self.series = series
         self.elbow_deviation = elbow_deviation
@@ -135,28 +142,28 @@ class SCAMPI:
             subsample=2,
             plot=True
     ):
-        """Computes the AU_EF plot to extract the best motif lengths
+        """Select the motif length minimizing the area under the elbow function.
 
-            This is the method to find and plot the characteristic motif-lengths, for k in
-            [2...k_max], using the area AU-EF plot.
+        Parameters
+        ----------
+        k_max : int
+            Exclusive upper bound on motif-set sizes to search, starting at 2.
+            The effective bound may be reduced to fit the available samples.
+        motif_length_range : array-like of int
+            Candidate motif lengths in original sample units.
+        subsample : int, default=2
+            Positive subsampling factor. The search uses every ``subsample``-th
+            sample and divides candidate lengths by this factor.
+        plot : bool, default=True
+            Plot the area under the elbow function for the candidate lengths.
 
-            Details are given within the paper 5.2 Learning Motif Length l.
-
-            Parameters
-            ----------
-            k_max: int
-                use [2...k_max] to compute the elbow plot.
-            motif_length_range: array-like
-                the interval of lengths
-            subsample: int (default=2)
-                the subsample factor
-
-            Returns
-            -------
-            best_motif_length: int
-                The motif length that maximizes the AU-EF.
-
-            """
+        Returns
+        -------
+        best_motif_length : numpy.integer
+            Candidate length with the smallest normalized area under the elbow
+            function (AU-EF), in original sample units. Also stored in
+            ``self.motif_length`` for subsequent calls to ``fit_k_elbow``.
+        """
 
         self.motif_length_range = motif_length_range
         self.k_max = k_max
@@ -202,47 +209,56 @@ class SCAMPI:
             plot_ground_truth=None,
             **kwargs,
     ):
-        """Plots the elbow-plot for k-Motiflets.
+        """Discover motif sets and select characteristic sizes using elbows.
 
-            This is the method to find and plot the characteristic k-Motiflets within range
-            [2...k_max] for given a `motif_length` using elbow-plots.
+        Parameters
+        ----------
+        k_max : int
+            Exclusive upper bound on motif-set sizes to search, starting at 2.
+            The effective bound may be reduced to fit the available samples.
+        motif_length : int or None, default=None
+            Positive motif length in samples. If None, use the length previously
+            selected by ``fit_motif_length`` or set by ``fit_k_elbow``.
+        filter : bool, default=True
+            Filter overlapping motif sets when selecting elbow points.
+        top_N : int or None, default=None
+            If None, search one candidate per set size and retain all selected
+            elbows. A positive N searches up to N candidates per size and
+            limits the flattened results and univariate grid plot to N sets.
+            The raw returned arrays still contain candidates for every size.
+        plot_elbows : bool, default=True
+            Plot extent curves and selected elbows.
+        plot_motifs_as_grid : bool, default=True
+            Plot selected motifs in a grid for univariate data, or a motif-set
+            plot for multivariate data.
+        plot_method_name : str or None, default=None
+            Method label for the univariate grid plot.
+        plot_ground_truth : pandas.Series or None, default=None
+            Ground-truth annotations for the motif plots.
+        **kwargs
+            Search and backend options. These override options with the same
+            name supplied to the constructor.
 
-            Details are given within the paper Section 5.1 Learning meaningful k.
+        Returns
+        -------
+        dists : numpy.ndarray
+            Extents indexed by ``[k, rank]``, with shape (effective_k_max, N),
+            where N is 1 when ``top_N`` is None. Smaller extents indicate more
+            similar occurrences; unavailable entries are infinity.
+        candidates : numpy.ndarray of object
+            Candidates indexed by set size. ``candidates[k][rank]`` contains
+            zero-based subsequence start offsets for a motif set of size k.
+            Unavailable sizes may have no candidates.
+        elbow_points : list of numpy.ndarray
+            Selected set sizes for each candidate rank. These index the first
+            axis of ``dists`` and ``candidates``.
 
-            Parameters
-            ----------
-            k_max: int
-                use [2...k_max] to compute the elbow plot (user parameter).
-            motif_length: int
-                the length of the motif (user parameter)
-            filter: bool, default=True
-                filters overlapping motif sets from the result,
-            top_N : int, default=None
-                Optional top-N mode. If None, preserves the original elbow-only
-                behavior: search one motif set per k and keep every motif set at
-                a found elbow. If set to N, search N motif sets per k, then limit
-                the flattened elbow result to N motif sets.
-            plot_elbows: bool, default=False
-                plots the elbow points into the plot
-            plot_motifs_as_grid: bool, default=True
-                plot_plots the motif sets as grid into the plot
-            plot_ground_truth: pd.Series (default=None)
-                Ground-truth information as pd.Series.
-            plot_method_name: str, default=None
-                The name of the method to be plotted in the title when plotting
-                motif sets as grid.
-            **kwargs
-                Additional search options, including scampi_top_n_strategy for the
-                SCAMPI backend.
-
-            Returns
-            -------
-            Tuple
-                dists:          distances for each k in [2...k_max]
-                candidates:     motifset-candidates for each k
-                elbow_points:   elbow-points
-
-            """
+        Notes
+        -----
+        Results are stored in ``self.dists``, ``self.motiflets``, and
+        ``self.elbow_points``. Use ``get_flattened_motifs`` to collect the
+        selected sets across ranks. Array rows 0 and 1 are unused.
+        """
         self.k_max = k_max
         self.top_N = top_N
 
@@ -311,6 +327,22 @@ class SCAMPI:
         return self.dists, self.motiflets, self.elbow_points
 
     def plot_dataset(self, max_points=10_000, path=None):
+        """Plot the input time series and constructor ground-truth annotations.
+
+        Parameters
+        ----------
+        max_points : int, default=10_000
+            Target maximum number of displayed time-series points.
+        path : str or path-like or None, default=None
+            Save the figure here when supplied. The figure is also displayed.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            The generated figure.
+        axes : numpy.ndarray of matplotlib.axes.Axes
+            Axes returned by the plotting helper.
+        """
         plotting = _plotting()
         fig, ax = plotting.plot_dataset(
             self.ds_name,
@@ -326,7 +358,32 @@ class SCAMPI:
         return fig, ax
 
     def plot_motifset(self, max_points=10_000, path=None, elbow_point=None):
-        """Plots the motif set for a given elbow point."""
+        """Plot candidates at a selected set size after ``fit_k_elbow``.
+
+        Parameters
+        ----------
+        max_points : int, default=10_000
+            Target maximum number of displayed time-series points.
+        path : str or path-like or None, default=None
+            Save the figure here when supplied. The figure is also displayed.
+        elbow_point : int or None, default=None
+            Set size indexing ``self.motiflets``, not an index into the elbow
+            list. Defaults to the last selected size for the first rank.
+            That rank must contain at least one elbow when this is omitted.
+
+        Returns
+        -------
+        fig : matplotlib.figure.Figure
+            The generated figure.
+        axes : numpy.ndarray of matplotlib.axes.Axes
+            Axes returned by the plotting helper.
+
+        Notes
+        -----
+        Candidates at the chosen size are flattened into one plotted set.
+        For separate plots of multiple candidate ranks, use the grid option
+        in ``fit_k_elbow``.
+        """
 
         if self.dists is None or self.motiflets is None or self.elbow_points is None:
             raise Exception("Please call fit_k_elbow first.")
@@ -350,6 +407,29 @@ class SCAMPI:
         return fig, ax
 
     def get_flattened_motifs(self, max_items=None):
+        """Collect motif sets selected at elbows after ``fit_k_elbow``.
+
+        Parameters
+        ----------
+        max_items : int or None, default=None
+            Positive limit on returned sets. None uses ``self.top_N``; if that
+            is also None, all selected sets are returned.
+
+        Returns
+        -------
+        dists : numpy.ndarray
+            One extent per selected motif set.
+        candidates : numpy.ndarray of object
+            Selected sets of zero-based subsequence start offsets.
+        indices : numpy.ndarray
+            Consecutive indices into the flattened results, starting at zero.
+            These are not the original set sizes.
+
+        Notes
+        -----
+        Sets are collected by candidate rank, then by the order of elbows
+        within each rank. They are not globally sorted by extent.
+        """
         if self.dists is None or self.motiflets is None or self.elbow_points is None:
             raise Exception("Please call fit_k_elbow first.")
 
@@ -1616,7 +1696,28 @@ def compute_preprocessing(data_raw, distance_preprocessing, m):
 
 
 def check_valid_backend(backend, data_raw, n):
-    """ Switch to LSH-backend, when length is >150_000 and univariate. """
+    """Select a backend based on window count and estimated matrix memory.
+
+    For univariate input, switch "default" or "scalable" to "scampi" at
+    225,000 windows. Otherwise, switch "default" to "scalable" at 25,000
+    univariate windows or when the estimated multivariate matrix exceeds
+    4 GiB. Other backend names are returned unchanged.
+
+    Parameters
+    ----------
+    backend : str
+        Requested backend name.
+    data_raw : numpy.ndarray
+        Input of shape (n_dimensions, n_samples).
+    n : int
+        Number of subsequence windows, ``n_samples - motif_length + 1``.
+
+    Returns
+    -------
+    str
+        Effective backend name. Automatic switching to "scampi" introduces
+        approximate discovery even when "default" or "scalable" was requested.
+    """
     if ((n >= 225_000) and (data_raw.shape[0] == 1)
             and (backend in ["default", "scalable"])):
         print(f"Setting 'scampi' backend for distance computations. "

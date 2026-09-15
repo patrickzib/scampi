@@ -70,6 +70,8 @@ exclude = ["tests", "tests.*"]
 
 [tool.setuptools.package-data]
 scampi = [
+    "data/*.txt.gz",
+    "data/README.md",
     "*.csv",
     "*.csv.gz",
     "*.arff",
